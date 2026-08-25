@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Live event state lives here. Never commit it.
+data/
+*.local
+
+.env
+.env*.local
+!.env.example
+
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts

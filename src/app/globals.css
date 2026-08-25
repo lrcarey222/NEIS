@@ -1,0 +1,331 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   NEIS Strategic Findings Auction — design tokens.
+
+   Built for a projector at the back of a large room: a deep, low-glare ground,
+   near-white text at high weight, and one accent (signal amber) reserved for
+   the thing the audience is meant to look at right now. Everything else is
+   greyscale so the accent never has to compete.
+
+   No web fonts. A conference network is the worst possible place to discover
+   that a font CDN is unreachable, so the stack is system-only.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --color-ink-900: #05080c;
+  --color-ink-850: #080d13;
+  --color-ink-800: #0b111a;
+  --color-ink-700: #101823;
+  --color-ink-600: #16202d;
+  --color-ink-500: #1d2937;
+  --color-ink-400: #2a3949;
+
+  --color-paper: #f4f6f8;
+  --color-paper-dim: #c9d4e0;
+  --color-paper-mute: #8798aa;
+  --color-paper-faint: #5b6b7d;
+
+  --color-signal: #f5b423;
+  --color-signal-dim: #8a6410;
+  --color-cyan: #34cfc4;
+
+  --color-momentum: #3ecf8e;
+  --color-fragility: #f4705f;
+  --color-bottleneck: #f5b423;
+  --color-opportunity: #6ba4ff;
+  --color-wildcard: #b48bff;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "Cascadia Mono", "Cascadia Code", "Segoe UI Mono", Consolas,
+    "Liberation Mono", monospace;
+}
+
+:root {
+  --type-momentum: var(--color-momentum);
+  --type-fragility: var(--color-fragility);
+  --type-bottleneck: var(--color-bottleneck);
+  --type-opportunity: var(--color-opportunity);
+  --type-wildcard: var(--color-wildcard);
+  color-scheme: dark;
+}
+
+* {
+  min-width: 0;
+}
+
+html,
+body {
+  background: var(--color-ink-900);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* A faint engineering grid. Present enough to read as "instrumentation",
+     quiet enough that nobody notices it during a talk. */
+  background-image:
+    linear-gradient(rgba(148, 180, 214, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 180, 214, 0.028) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-attachment: fixed;
+}
+
+/* --- Typographic utilities ------------------------------------------------ */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-paper-mute);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* --- Surfaces ------------------------------------------------------------- */
+
+.panel {
+  background: color-mix(in srgb, var(--color-ink-800) 88%, transparent);
+  border: 1px solid var(--color-ink-500);
+  border-radius: 0.375rem;
+}
+
+.hairline {
+  border-color: var(--color-ink-500);
+}
+
+/* Thin accent rule used as a section marker throughout. */
+.rule-signal::before {
+  content: "";
+  display: block;
+  width: 2.5rem;
+  height: 2px;
+  background: var(--color-signal);
+  margin-bottom: 0.75rem;
+}
+
+/* --- Finding type accents ------------------------------------------------- */
+/* Colour is always paired with the type label and glyph in the markup, so the
+   board stays readable for colour-blind viewers and on badly calibrated
+   projectors. These classes only add emphasis, never information. */
+
+[data-type="momentum"] { --accent: var(--type-momentum); }
+[data-type="fragility"] { --accent: var(--type-fragility); }
+[data-type="bottleneck"] { --accent: var(--type-bottleneck); }
+[data-type="opportunity"] { --accent: var(--type-opportunity); }
+[data-type="wildcard"] { --accent: var(--type-wildcard); }
+
+.type-bar {
+  box-shadow: inset 3px 0 0 0 var(--accent, var(--color-paper-faint));
+}
+
+.type-text {
+  color: var(--accent, var(--color-paper-mute));
+}
+
+.type-chip {
+  color: var(--accent, var(--color-paper-mute));
+  background: color-mix(in srgb, var(--accent, #888) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #888) 35%, transparent);
+}
+
+/* --- Focus ---------------------------------------------------------------- */
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* --- Form controls -------------------------------------------------------- */
+
+.field {
+  width: 100%;
+  background: var(--color-ink-900);
+  border: 1px solid var(--color-ink-400);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  color: var(--color-paper);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.field::placeholder {
+  color: var(--color-paper-faint);
+}
+
+.field:focus {
+  border-color: var(--color-signal);
+  outline: none;
+}
+
+.field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+textarea.field {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+select.field {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-paper-mute) 50%),
+    linear-gradient(135deg, var(--color-paper-mute) 50%, transparent 50%);
+  background-position: right 1rem center, right 0.7rem center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 2rem;
+}
+
+.label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-paper-mute);
+  margin-bottom: 0.375rem;
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid transparent;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-signal);
+  color: var(--color-ink-900);
+}
+.btn-primary:not(:disabled):hover {
+  background: #ffc94a;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--color-ink-400);
+  color: var(--color-paper-dim);
+}
+.btn-ghost:not(:disabled):hover {
+  border-color: var(--color-paper-faint);
+  color: var(--color-paper);
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--color-fragility) 55%, transparent);
+  color: var(--color-fragility);
+}
+.btn-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-fragility) 14%, transparent);
+}
+
+/* --- Motion ---------------------------------------------------------------
+   Quick and declarative. Nothing on the projector should take longer than a
+   moderator's sentence, and everything stops entirely for reduced-motion. */
+
+@keyframes neis-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes neis-flash {
+  0% { background-color: color-mix(in srgb, var(--color-signal) 32%, transparent); }
+  100% { background-color: transparent; }
+}
+
+@keyframes neis-sold {
+  0% { opacity: 1; transform: scale(1); }
+  35% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 0; transform: scale(0.94) translateY(-14px); }
+}
+
+.animate-rise { animation: neis-rise 260ms ease-out both; }
+.animate-flash { animation: neis-flash 1400ms ease-out both; }
+.animate-sold { animation: neis-sold 620ms ease-in both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Signals "there is more below" on the big screen, where nobody can scroll.
+   The mask only bites once content actually overflows. */
+.scroll-fade {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent 100%);
+}
+
+/* --- Scrollbars ----------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-400) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-400);
+  border-radius: 4px;
+}
+
+/* --- Big-screen scaling ---------------------------------------------------
+   /display is authored at a comfortable desktop size and then scaled up on
+   large panels, so a 55" screen at the back of the room reads at the same
+   apparent size as a laptop at arm's length. */
+
+/* Sized from whichever axis binds, so the same layout fits a 1080p projector,
+   a 4K panel, or an oddly-proportioned hotel screen without re-tuning. The
+   1.05vw / 1.85vh pair lands on ~20px at 1920x1080, the design reference. */
+.display-root {
+  font-size: clamp(13px, min(1.05vw, 1.85vh), 34px);
+}
+
+/* --- Print ----------------------------------------------------------------
+   Used by the printable summary at /api/export/summary. */
+
+@media print {
+  html, body {
+    background: #fff;
+    color: #111;
+  }
+  body { background-image: none; }
+  .no-print { display: none !important; }
+}
