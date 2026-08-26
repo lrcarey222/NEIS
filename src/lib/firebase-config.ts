@@ -35,9 +35,11 @@ export interface FirebaseConfig {
   storageBucket?: string;
   messagingSenderId?: string;
   appId?: string;
+  /** Present when Analytics is enabled on the project. Unused, but harmless. */
+  measurementId?: string;
 }
 
-export const FIREBASE_CONFIG: firebaseConfig = {
+export const FIREBASE_CONFIG: FirebaseConfig = {
   apiKey: "AIzaSyAeA65Me-xSNkV7M5NYP8DL1WtXtKGMnDk",
   authDomain: "neis-climate-week.firebaseapp.com",
   databaseURL: "https://neis-climate-week-default-rtdb.firebaseio.com",
@@ -45,10 +47,8 @@ export const FIREBASE_CONFIG: firebaseConfig = {
   storageBucket: "neis-climate-week.firebasestorage.app",
   messagingSenderId: "913730178372",
   appId: "1:913730178372:web:1c81b74a61b672626c1b11",
-  measurementId: "G-NR0R24KMPC"
-
+  measurementId: "G-NR0R24KMPC",
 };
-
 
 /** Root node for this app, so it can share a database with other projects. */
 export const DB_ROOT = "neis";
