@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "neis": {
+      "events": {
+        ".read": true,
+        ".write": true,
+        "$eventKey": {
+          ".validate": "newData.hasChildren(['event']) || !newData.exists()"
+        }
+      },
+      "presence": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

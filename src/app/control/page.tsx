@@ -9,8 +9,11 @@ import { AwardPanel } from "@/components/control/AwardPanel";
 import { BreakoutsPanel } from "@/components/control/BreakoutsPanel";
 import { LedgerPanel } from "@/components/control/LedgerPanel";
 import { SetupPanel } from "@/components/control/SetupPanel";
-import { api, useEvent } from "@/lib/useEvent";
-import type { DisplayMode } from "@/lib/types";
+import { patchEvent, patchTimer } from "@/lib/actions";
+import { findingsCsv, downloadCsv, portfoliosCsv, transactionsCsv } from "@/lib/csv";
+import { isAdmin, useRole } from "@/lib/localAuth";
+import { useEvent } from "@/lib/useEvent";
+import type { DisplayMode, EventState } from "@/lib/types";
 
 type Tab = "auction" | "ledger" | "breakouts" | "setup";
 
@@ -25,14 +28,15 @@ const TABS: { key: Tab; label: string }[] = [
  * The operator control room.
  *
  * Everything that has to happen fast lives above the tabs — display mode,
- * timer, and the round position — so switching what the room sees never costs
- * the operator their place in the transaction form.
+ * timer, round position — so switching what the room sees never costs the
+ * operator their place in the transaction form.
  */
 export default function ControlPage() {
-  const { state, role, status, refresh } = useEvent();
+  const { state, status, mode } = useEvent("control");
+  const [role, setRole] = useRole();
   const [tab, setTab] = useState<Tab>("auction");
 
-  if (!state) {
+  if (status === "connecting") {
     return (
       <main className="flex min-h-dvh items-center justify-center">
         <p className="eyebrow animate-pulse">Loading control room…</p>
@@ -40,14 +44,20 @@ export default function ControlPage() {
     );
   }
 
-  if (role?.kind !== "admin") {
+  if (!isAdmin(role)) {
     return (
       <PinGate
         title="Operator control room"
         hint="Enter the administrator PIN. This screen records auction results and drives the projected display."
-        onAuthenticated={refresh}
+        state={state}
+        onAuthenticated={setRole}
       />
     );
+  }
+
+  // No event yet — the only thing that matters is creating one.
+  if (!state) {
+    return <FirstRun mode={mode} />;
   }
 
   return (
@@ -71,7 +81,7 @@ export default function ControlPage() {
           <div className="flex items-center gap-4">
             {state.timer.visible ? <CountdownDisplay timer={state.timer} size="sm" /> : null}
             <StatusDot status={status} />
-            <a className="btn btn-ghost" href="/display" target="_blank" rel="noreferrer">
+            <a className="btn btn-ghost" href="../display/" target="_blank" rel="noreferrer">
               Open display ↗
             </a>
           </div>
@@ -80,17 +90,27 @@ export default function ControlPage() {
         <DisplayControls state={state} />
       </header>
 
-      {state.event.isDemo && state.transactions.length === 0 ? (
+      {status === "local" ? (
         <div className="mb-5">
-          <Notice tone="warn">
-            This event is loaded with <strong>sample findings</strong> for rehearsal. Before the
-            live session, go to <strong>Setup → Event lifecycle</strong> and create a new live
-            event, or clear the findings.
+          <Notice tone="error">
+            <strong>Local-only mode — breakout rooms cannot reach this event.</strong> Paste
+            your project&apos;s values into <code>src/lib/firebase-config.ts</code> and
+            redeploy before the session. Until then, everything here stays in this browser.
           </Notice>
         </div>
       ) : null}
 
-      <nav className="border-ink-500 mb-5 flex gap-1 border-b">
+      {state.event.isDemo && state.transactions.length === 0 ? (
+        <div className="mb-5">
+          <Notice tone="warn">
+            This event is loaded with <strong>sample findings</strong> for rehearsal. Before
+            the live session, go to <strong>Setup → Event lifecycle</strong> and create a new
+            live event, or clear the findings.
+          </Notice>
+        </div>
+      ) : null}
+
+      <nav className="border-ink-500 mb-5 flex flex-wrap gap-1 border-b">
         {TABS.map((entry) => (
           <button
             key={entry.key}
@@ -113,16 +133,28 @@ export default function ControlPage() {
         ))}
 
         <div className="ml-auto flex items-center gap-2 pb-1.5">
-          <a className="btn btn-ghost" href="/api/export/findings">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => downloadCsv("neis-findings.csv", findingsCsv(state))}
+          >
             Findings CSV
-          </a>
-          <a className="btn btn-ghost" href="/api/export/transactions">
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => downloadCsv("neis-auction-ledger.csv", transactionsCsv(state))}
+          >
             Ledger CSV
-          </a>
-          <a className="btn btn-ghost" href="/api/export/portfolios">
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => downloadCsv("neis-final-portfolios.csv", portfoliosCsv(state))}
+          >
             Portfolios CSV
-          </a>
-          <a className="btn btn-ghost" href="/summary" target="_blank" rel="noreferrer">
+          </button>
+          <a className="btn btn-ghost" href="../summary/" target="_blank" rel="noreferrer">
             Printable summary ↗
           </a>
         </div>
@@ -136,8 +168,78 @@ export default function ControlPage() {
   );
 }
 
+/**
+ * Shown when the database has no event at this key yet.
+ *
+ * Takes `mode` rather than the connection status on purpose: with no event,
+ * status is "empty" for both a working Firebase connection and an unconfigured
+ * one, and this screen is the last chance to catch "we ran the whole breakout
+ * session in local mode" before it costs an hour of the room's work.
+ */
+function FirstRun({ mode }: { mode: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create(demo: boolean) {
+    setBusy(true);
+    const { createNewEvent } = await import("@/lib/actions");
+    const result = await createNewEvent({ demo });
+    setBusy(false);
+    if (!result.ok) setError(result.error ?? "Could not create the event.");
+  }
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center p-6">
+      <div className="panel w-full max-w-lg p-8">
+        <div className="rule-signal mb-5">
+          <h1 className="text-paper text-xl font-semibold">No event yet</h1>
+          <p className="text-paper-mute mt-2 text-sm leading-relaxed">
+            Nothing has been created at this event slot. Start with a rehearsal event to
+            practise, or an empty live event for the real session.
+          </p>
+        </div>
+
+        {mode === "local" ? (
+          <div className="mb-5">
+            <Notice tone="error">
+              <strong>Local only — breakout rooms will not see this event.</strong> Paste your
+              project values into <code>src/lib/firebase-config.ts</code> and redeploy before
+              the session, or anything created here stays in this browser.
+            </Notice>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="mb-5">
+            <Notice tone="error">{error}</Notice>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            className="btn btn-primary py-3"
+            disabled={busy}
+            onClick={() => void create(true)}
+          >
+            Create rehearsal event (25 sample findings)
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost py-3"
+            disabled={busy}
+            onClick={() => void create(false)}
+          >
+            Create empty live event
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 /** Display mode + countdown, always visible regardless of which tab is open. */
-function DisplayControls({ state }: { state: React.ComponentProps<typeof AwardPanel>["state"] }) {
+function DisplayControls({ state }: { state: EventState }) {
   const [minutes, setMinutes] = useState("20");
   const [label, setLabel] = useState(state.timer.label);
 
@@ -149,13 +251,13 @@ function DisplayControls({ state }: { state: React.ComponentProps<typeof AwardPa
 
   return (
     <div className="panel flex flex-wrap items-center gap-x-6 gap-y-3 p-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="eyebrow mr-1">Big screen</span>
         {modes.map((mode) => (
           <button
             key={mode.key}
             type="button"
-            onClick={() => void api("/api/event", "PATCH", { displayMode: mode.key })}
+            onClick={() => void patchEvent(state, { displayMode: mode.key })}
             className={cx(
               "rounded-sm border px-3 py-1.5 text-xs font-semibold transition-colors",
               state.event.displayMode === mode.key
@@ -171,9 +273,7 @@ function DisplayControls({ state }: { state: React.ComponentProps<typeof AwardPa
         {state.event.displayMode === "portfolios" ? (
           <button
             type="button"
-            onClick={() =>
-              void api("/api/event", "PATCH", { showSummary: !state.event.showSummary })
-            }
+            onClick={() => void patchEvent(state, { showSummary: !state.event.showSummary })}
             className="border-ink-400 text-paper-mute hover:text-paper ml-1 rounded-sm border border-dashed px-3 py-1.5 text-xs font-semibold transition-colors"
           >
             {state.event.showSummary ? "← Show roster" : "Show summary cuts →"}
@@ -181,7 +281,7 @@ function DisplayControls({ state }: { state: React.ComponentProps<typeof AwardPa
         ) : null}
       </div>
 
-      <div className="border-ink-500 flex items-center gap-2 border-l pl-6">
+      <div className="border-ink-500 flex flex-wrap items-center gap-2 sm:border-l sm:pl-6">
         <span className="eyebrow mr-1">Timer</span>
         <input
           className="field tabular w-16 px-2 py-1 text-sm"
@@ -202,8 +302,7 @@ function DisplayControls({ state }: { state: React.ComponentProps<typeof AwardPa
           type="button"
           className="btn btn-ghost px-2.5 py-1 text-xs"
           onClick={() =>
-            void api("/api/timer", "PATCH", {
-              action: "start",
+            void patchTimer(state, "start", {
               seconds: Math.max(1, Number(minutes) || 1) * 60,
               label,
             })
@@ -214,22 +313,14 @@ function DisplayControls({ state }: { state: React.ComponentProps<typeof AwardPa
         <button
           type="button"
           className="btn btn-ghost px-2.5 py-1 text-xs"
-          onClick={() =>
-            void api("/api/timer", "PATCH", {
-              action: state.timer.running ? "pause" : "resume",
-            })
-          }
+          onClick={() => void patchTimer(state, state.timer.running ? "pause" : "resume")}
         >
           {state.timer.running ? "Pause" : "Resume"}
         </button>
         <button
           type="button"
           className="btn btn-ghost px-2.5 py-1 text-xs"
-          onClick={() =>
-            void api("/api/timer", "PATCH", {
-              action: state.timer.visible ? "hide" : "show",
-            })
-          }
+          onClick={() => void patchTimer(state, state.timer.visible ? "hide" : "show")}
         >
           {state.timer.visible ? "Hide" : "Show"}
         </button>

@@ -78,18 +78,35 @@ export function Eyebrow({ children, className }: { children: ReactNode; classNam
   return <div className={cx("eyebrow", className)}>{children}</div>;
 }
 
-/** Live-connection indicator. Silent when healthy, obvious when not. */
+/**
+ * Sync indicator. Quiet when healthy, loud when this browser is only talking
+ * to its own tabs — that distinction is the difference between five breakout
+ * rooms sharing a board and five rooms each editing their own private copy,
+ * so LOCAL ONLY is deliberately alarming rather than subtle.
+ */
 export function StatusDot({ status }: { status: string }) {
-  const map: Record<string, { color: string; label: string }> = {
+  const map: Record<string, { color: string; label: string; text?: string; title?: string }> = {
     live: { color: "bg-momentum", label: "Live" },
     connecting: { color: "bg-signal", label: "Connecting" },
-    polling: { color: "bg-signal", label: "Reconnecting" },
-    offline: { color: "bg-fragility", label: "Offline" },
+    local: {
+      color: "bg-fragility",
+      label: "Local only",
+      text: "text-fragility",
+      title:
+        "Firebase is not configured (or ?local=1 is set). Changes stay in this browser and will NOT reach other devices.",
+    },
+    empty: { color: "bg-paper-faint", label: "No event" },
   };
-  const entry = map[status] ?? map.offline;
+  const entry = map[status] ?? map.empty;
 
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[0.6875rem] tracking-[0.12em] text-paper-mute uppercase">
+    <span
+      title={entry.title}
+      className={cx(
+        "inline-flex items-center gap-1.5 font-mono text-[0.6875rem] tracking-[0.12em] uppercase",
+        entry.text ?? "text-paper-mute",
+      )}
+    >
       <span className={cx("h-1.5 w-1.5 rounded-full", entry.color)} aria-hidden="true" />
       {entry.label}
     </span>

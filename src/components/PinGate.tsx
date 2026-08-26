@@ -2,46 +2,45 @@
 
 import { useState } from "react";
 
-import { api } from "@/lib/useEvent";
+import { attemptLogin } from "@/lib/localAuth";
+import type { EventState, Role } from "@/lib/types";
 import { Notice } from "./primitives";
 
 /**
  * PIN entry for /control and the breakout rooms.
  *
- * The PIN is exchanged for a signed role cookie server-side and never kept in
- * component state, so a facilitator handing their laptop to a colleague is not
- * also handing over a reusable secret sitting in the DOM.
+ * The check runs in the browser against PINs held in the event record. See
+ * lib/localAuth.ts for why that is an accepted trade here rather than an
+ * oversight — briefly: this stops someone opening the wrong room's form, and
+ * the content ends up projected on a wall regardless.
  */
 export function PinGate({
   title,
   hint,
   slug,
+  state,
   onAuthenticated,
 }: {
   title: string;
   hint: string;
   /** Restricts matching to one breakout's PIN. Omit for /control. */
   slug?: string;
-  onAuthenticated: () => void;
+  state: EventState | null;
+  onAuthenticated: (role: Role) => void;
 }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  async function submit(event: React.FormEvent) {
+  function submit(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
+    const result = attemptLogin(state, pin, slug);
 
-    const result = await api("/api/auth", "POST", { pin, slug });
-    setBusy(false);
-
-    if (!result.ok) {
+    if (!result.ok || !result.role) {
       setError(result.error ?? "That PIN was not recognised.");
       setPin("");
       return;
     }
-    onAuthenticated();
+    onAuthenticated(result.role);
   }
 
   return (
@@ -73,8 +72,8 @@ export function PinGate({
           </div>
         ) : null}
 
-        <button type="submit" className="btn btn-primary mt-6 w-full py-2.5" disabled={busy}>
-          {busy ? "Checking…" : "Enter"}
+        <button type="submit" className="btn btn-primary mt-6 w-full py-2.5">
+          Enter
         </button>
       </form>
     </main>

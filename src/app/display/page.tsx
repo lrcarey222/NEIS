@@ -21,7 +21,7 @@ import type { DisplayMode } from "@/lib/types";
  * off the network mid-session.
  */
 export default function DisplayPage() {
-  const { state, status } = useEvent();
+  const { state, status } = useEvent("display");
   const [detail, setDetail] = useState<FindingView | null>(null);
   const [modeOverride, setModeOverride] = useState<DisplayMode | null>(null);
 
@@ -51,8 +51,19 @@ export default function DisplayPage() {
 
   if (!state) {
     return (
-      <main className="flex min-h-dvh items-center justify-center">
-        <p className="eyebrow animate-pulse">Connecting to the event…</p>
+      <main className="flex min-h-dvh items-center justify-center p-8 text-center">
+        {status === "connecting" ? (
+          <p className="eyebrow animate-pulse">Connecting to the event…</p>
+        ) : (
+          <div className="max-w-md">
+            <p className="eyebrow mb-3">No event yet</p>
+            <p className="text-paper-mute text-sm leading-relaxed">
+              The operator has not created this event. Open{" "}
+              <span className="text-signal font-mono">/control</span> and create one from
+              the Setup tab.
+            </p>
+          </div>
+        )}
       </main>
     );
   }

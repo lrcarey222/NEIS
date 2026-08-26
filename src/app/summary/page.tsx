@@ -1,3 +1,5 @@
+"use client";
+
 import {
   allPanelistViews,
   buildSummary,
@@ -5,10 +7,8 @@ import {
   sortedBreakouts,
   transactionForFinding,
 } from "@/lib/derive";
-import { getState } from "@/lib/store";
+import { useEvent } from "@/lib/useEvent";
 import { CONFIDENCE_META, FINDING_TYPE_META } from "@/lib/types";
-
-export const dynamic = "force-dynamic";
 
 /**
  * Print-oriented record of the whole session.
@@ -17,8 +17,19 @@ export const dynamic = "force-dynamic";
  * presentation theme, so Ctrl-P / Save as PDF produces something that can be
  * circulated after the event without a black background.
  */
-export default async function SummaryPage() {
-  const state = await getState();
+export default function SummaryPage() {
+  const { state, status } = useEvent("summary");
+
+  if (!state) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-white p-8">
+        <p className="font-mono text-xs tracking-widest text-[#666] uppercase">
+          {status === "connecting" ? "Loading the event…" : "No event to summarise yet."}
+        </p>
+      </div>
+    );
+  }
+
   const panelists = allPanelistViews(state);
   const summary = buildSummary(state);
   const breakouts = sortedBreakouts(state);
@@ -33,7 +44,7 @@ export default async function SummaryPage() {
           Use your browser&apos;s Print dialog and choose “Save as PDF”.
         </p>
         <a
-          href="/control"
+          href="../control/"
           className="rounded border border-[#ccc] px-3 py-1.5 text-sm font-semibold text-[#111] no-underline"
         >
           Back to control

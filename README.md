@@ -2,18 +2,18 @@
 
 A live-event web app for the NEIS session at NYC Climate Week.
 
-Five breakout groups each record five Strategic Findings. Every finding lands on a shared
-board. A final panel then bids fictional investment credits to acquire one finding for each
-of five strategic objectives. The bidding happens **verbally in the room** — this app captures
-the findings, projects the board, and lets an operator record each result so the big screen
-updates instantly.
+Five breakout groups each record five Strategic Findings **at the same time, from their own
+laptops**. Every finding lands on a shared board the moment it is submitted. A final panel
+then bids fictional investment credits to acquire one finding for each of five strategic
+objectives. The bidding happens **verbally in the room** — this app captures the findings,
+projects the board, and lets an operator record each result so every screen updates instantly.
 
 ```
 /                    Landing page — QR codes for each breakout room
 /display             Big screen (16:9). Three modes, driven by the operator
 /breakout/<slug>     Facilitator workspace, one per room. PIN protected
 /control             Operator control room. Administrator PIN
-/summary             Printable / save-as-PDF record of the whole session
+/summary             Printable / save-as-PDF record of the session
 ```
 
 ---
@@ -27,138 +27,143 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. The app boots with a **demo event already loaded** — 25 sample
-findings, four panelists, 100 credits each — so you can rehearse the full exercise
-immediately. Default PINs are `2026` for `/control` and `1234` for every breakout room.
+Open <http://localhost:3000>. Go to `/control`, enter the admin PIN (`2026` by default), and
+create a rehearsal event — that loads 25 sample findings so you can walk the whole exercise
+immediately.
 
-To rehearse the auction right now: open `/control`, enter `2026`, and start awarding findings
-on the **Auction** tab with `/display` open in a second window.
+Until you paste a Firebase config (next section), the app runs in **local mode**: fully
+functional, but state is shared only between tabs of the same browser. A red **LOCAL ONLY**
+badge appears on every screen so this can never be mistaken for the real thing.
 
-### Production
-
-```bash
-npm run build
-npm start
-```
-
-`npm start` serves on port 3000; set `PORT` to change it. The build also emits
-`.next/standalone`, so the app can be shipped as a single Node process.
+> **Working inside OneDrive or Dropbox?** The sync client turns build artefacts into cloud
+> placeholders mid-build and `next build` fails with `EINVAL: readlink`. Point the build
+> somewhere unsynced — the exported site still lands in `./out`:
+>
+> ```bash
+> NEXT_DIST_DIR=../../../../neis-build npm run build
+> ```
+>
+> (On Windows PowerShell: `$env:NEXT_DIST_DIR="../../../../neis-build"; npm run build`.)
+> This only affects local builds; CI is unaffected.
 
 ---
 
-## Architecture, and why it is not Supabase
+## Firebase setup — do this before the event
 
-The brief suggested Next.js + Supabase or Firebase. This build keeps **Next.js 15, React 19,
-TypeScript and Tailwind CSS v4**, but replaces the hosted database with a **single JSON file
-plus Server-Sent Events**.
+This is the step that turns five separate laptops into one shared board. It takes about five
+minutes and is free.
 
-The event is a few dozen records — 25 findings, a handful of panelists, at most 25
-transactions — with exactly one writer (the operator). At that size, a hosted database adds
-failure modes without adding capability: an expired key, a paused free-tier project, or hotel
-wifi that cannot reach the API all become a dead scoreboard in front of a room of senior
-policymakers. The file store has no credentials to expire and no network hop, so the app runs
-correctly on a laptop with the wifi switched off.
+1. Go to <https://console.firebase.google.com> → **Add project**. Name it something like
+   `neis-climate-week`. Disable Analytics when asked.
+2. Left sidebar → **Build → Realtime Database → Create Database**. Pick a location, choose
+   **Start in test mode**, Enable.
+3. Gear icon → **Project settings** → **Your apps** → click the Web icon `</>` → register an
+   app. Firebase shows a `firebaseConfig = {...}` object.
+4. Copy those values into **`src/lib/firebase-config.ts`**, replacing the `PASTE_YOUR_*`
+   placeholders. Make sure `databaseURL` is included — if Firebase does not show it, it is
+   `https://<your-project-id>-default-rtdb.firebaseio.com`.
+5. Realtime Database → **Rules** tab → paste the contents of **`database.rules.json`** from
+   this repo → **Publish**. (Test mode expires after 30 days and would take the event down
+   mid-session; these rules do not expire.)
+6. Commit and push. The deploy workflow rebuilds the site and live sync is on.
 
-What that buys, concretely:
+Verify it worked: open `/control` → **Setup** → the **Sync** card at the top should read
+*"Connected to Firebase"*. If it says **Local only**, something in step 4 did not take.
 
-- **No configuration required.** Clone, `npm install`, run. Nothing to provision.
-- **Real-time by push.** Every mutation fans out to all connected screens over SSE, with an
-  automatic polling fallback if a proxy will not hold the stream open.
-- **Atomic, crash-safe writes.** Writes are serialised through a queue and land via
-  write-temp-then-rename, so a crash cannot truncate the state file.
-- **A readable state file.** If something goes badly wrong on stage, `data/event.json` can be
-  fixed in a text editor and the server restarted.
-- **Trivial undo.** The transaction log is the only source of truth for the auction — budgets,
-  availability and portfolios are all derived from it. Undo deletes one row; nothing can be
-  left half-applied.
+The `apiKey` in that file is **not a secret**. Firebase web API keys are public by design and
+are safe to commit; access is controlled by the database rules, not by hiding the key.
 
-The trade-off is that the app must run as **one long-lived Node process with a writable disk**.
-That rules out multi-instance serverless (plain Vercel), and it means the state file should be
-on a persistent volume. Deployment options below.
+### Testing against the real database
 
-### Layout
-
-```
-src/lib/types.ts       Domain model
-src/lib/derive.ts      Pure selectors + every auction rule (shared server/client)
-src/lib/store.ts       File persistence, write queue, in-process pub/sub
-src/lib/seed.ts        Event scaffolding + the 25 demo findings
-src/lib/auth.ts        PIN -> signed role cookie
-src/lib/useEvent.ts    Client hook: SSE + polling fallback
-src/app/api/*          Route handlers
-src/components/*       UI
-tests/                 Rule tests + full end-to-end walkthrough
+```bash
+node --import ./tests/ts-resolver.mjs tests/e2e.mjs https://<your-project>-default-rtdb.firebaseio.com
 ```
 
-`derive.ts` is pure and dependency-free, so the same `validateAward` runs in the browser to
-warn the operator as they type and on the server to enforce the rule. The warning shown is
-exactly the rule applied.
+42 checks against live Firebase, including the concurrency guarantee. It works under
+`<root>/events/__e2e` and deletes that node when it finishes, so it is safe to run against the
+event database — but run it before the session, not during.
+
+---
+
+## Architecture
+
+**Next.js 15 + React 19 + TypeScript + Tailwind v4, exported as a static site, with Firebase
+Realtime Database for all state.** There is no server: `npm run build` emits plain HTML and JS
+into `out/`, which GitHub Pages serves. Nothing can crash mid-session because nothing is
+running.
+
+```
+src/lib/types.ts          Domain model
+src/lib/derive.ts         Pure selectors + every auction rule
+src/lib/seed.ts           Event scaffolding + the 25 demo findings
+src/lib/firebase-config.ts  ← paste your project values here
+src/lib/net.ts            Transport: Firebase adapter | local fallback
+src/lib/serialize.ts      EventState (arrays) ⇄ RTDB (keyed objects)
+src/lib/actions.ts        Every mutation
+src/lib/localAuth.ts      PIN → role, in the browser
+src/lib/useEvent.ts       The hook every screen reads from
+tests/                    Rule tests + live end-to-end walkthrough
+```
+
+Three decisions carry most of the weight:
+
+**The transaction log is the only source of truth for the auction.** A `Finding` never stores
+who bought it or for how much — budgets, availability and portfolios are all derived from
+`transactions`. Undo is therefore a one-row delete that cannot leave the scoreboard
+half-updated in front of a room.
+
+**Writes are as narrow as possible.** A facilitator typing a headline writes
+`findings/<id>/headline`, not the whole finding and certainly not the whole event. That is
+what lets five rooms — and two people at the same table — edit simultaneously without
+overwriting each other. The end-to-end test fires all five rooms' writes at once and asserts
+nothing is lost.
+
+**Awards go through a database transaction.** `awardFinding` re-runs the full validation
+*inside* an RTDB transaction, against committed state rather than whatever this browser
+happened to be rendering. Two operators clicking AWARD on the same finding cannot both
+succeed.
+
+There is one adapter boundary: when the Firebase config is unfilled, or the URL carries
+`?local=1`, `net()` returns a localStorage + BroadcastChannel adapter with an identical
+interface. Nothing above that file knows which is active, so the app is fully usable and
+testable before anyone touches the Firebase console.
 
 ---
 
 ## Environment variables
 
-Every value has a working default; the app runs with no `.env` at all. Copy `.env.example` to
-`.env.local` to override.
+Everything has a working default; the app builds and runs with no environment at all.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ADMIN_PIN` | `2026` | Unlocks `/control`. **Change this before the event.** |
-| `BREAKOUT_PIN` | `1234` | Default PIN for new breakouts. Per-room PINs are editable in Setup. |
-| `NEIS_DATA_DIR` | `./data` | Where `event.json` and `audit.jsonl` are written. Point at a persistent volume when hosted. |
-| `NEIS_PUBLIC_URL` | inferred | Base URL for the landing-page QR codes. Usually unnecessary — inferred from the request. |
-| `SESSION_SECRET` | falls back to `ADMIN_PIN` | HMAC key for session cookies. |
-| `NEIS_SECURE_COOKIES` | unset | Set to `1` **only** when serving over HTTPS. Leave unset on a plain-HTTP LAN or nobody can log in. |
-| `PORT` | `3000` | Server port. |
+| `NEXT_PUBLIC_ADMIN_PIN` | `2026` | Unlocks `/control`. **Change this before the event.** Set it as an Actions *variable* named `ADMIN_PIN` for deploys. |
+| `NEXT_PUBLIC_BASE_PATH` | empty | URL prefix. The deploy workflow sets it to `/<repo>` for GitHub Pages. Leave unset locally. |
+
+Breakout PINs are **not** environment variables — they live in the event record and are
+editable in `/control` → Setup, so you can change them on the day.
 
 ---
 
 ## Deployment
 
-**The reliable option — run it in the room.** Start the app on the operator's laptop, connect
-the projector, and have facilitators join over the venue wifi at `http://<laptop-ip>:3000`.
-Find the IP with `ipconfig` (Windows) or `ipconfig getifaddr en0` (macOS). No internet
-required. Check beforehand that the venue network does not use client isolation — if it does,
-a phone hotspot works, or use a hosted deployment.
+Push to `main`. The workflow in `.github/workflows/deploy.yml` runs the tests, builds the
+static export, and publishes to GitHub Pages.
 
-**Hosted — any platform that runs a persistent Node process with a disk.** Render, Railway,
-Fly.io, or a plain VPS:
+One-time repo setup: **Settings → Pages → Source → GitHub Actions**. Then set
+**Settings → Secrets and variables → Actions → Variables → New variable**, named `ADMIN_PIN`,
+to the PIN you want in production.
 
-- Build `npm run build`, start `npm start`
-- Attach a persistent disk and set `NEIS_DATA_DIR` to its mount path
-- Set `ADMIN_PIN` and `NEIS_SECURE_COOKIES=1`
-- **Run exactly one instance.** Two instances would each hold their own copy of the state.
+The site lands at `https://<owner>.github.io/<repo>/`. You can also redeploy from the Actions
+tab without pushing, which is the safe way to pick up a PIN change on the morning of the event.
 
-**Docker.** `output: "standalone"` is already enabled, so a minimal image is:
-
-```dockerfile
-FROM node:24-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-FROM node:24-alpine
-WORKDIR /app
-ENV NODE_ENV=production NEIS_DATA_DIR=/data
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/public ./public
-VOLUME /data
-EXPOSE 3000
-CMD ["node", "server.js"]
-```
-
-Plain Vercel is **not** suitable without swapping the store for a hosted database, because
-serverless instances have an ephemeral filesystem and do not share an in-process event bus.
+Any static host works — Netlify, Cloudflare Pages, S3, or a USB stick. Only the `out/`
+directory matters.
 
 ---
 
 ## Creating and resetting an event
 
-All of this lives in `/control` → **Setup** → **Event lifecycle**. Destructive actions require
-typing `RESET` first.
+`/control` → **Setup** → **Event lifecycle**. Destructive actions require typing `RESET`.
 
 | Action | Effect |
 | --- | --- |
@@ -166,13 +171,21 @@ typing `RESET` first.
 | **New live event** | Wipes everything and starts empty. **Use this before the real session.** |
 | **Seed empty finding templates** | Gives every room its five blank cards so facilitators can start typing straight away. |
 | **Submit all breakouts** | Publishes everything currently written. Handy mid-rehearsal. |
-| **Reset the auction** | Clears all transactions and returns to Round 0, **keeping every finding**. This is the one to use between a rehearsal auction and the real one. |
+| **Reset the auction** | Clears all transactions and returns to Round 0, **keeping every finding**. Use this between the rehearsal auction and the real one. |
 | **Clear all findings** | Removes findings and transactions but keeps panelists, objectives and settings. |
 
-The demo findings are **illustrative placeholders**, not verified research. They are written to
-be realistic in shape so the exercise can be rehearsed; replace them with what the breakouts
-actually produce. A **DEMO DATA** badge shows on `/display` and `/control` whenever a seeded
-event is loaded, so it cannot be mistaken for the real thing on the projector.
+These act on **everyone**, including a breakout room mid-sentence. That is why they need the
+typed confirmation.
+
+**Two event slots.** The URL takes `?event=` — `main` (the default) and anything else you
+like, e.g. `?event=rehearsal`. They are completely separate events in the same database, so
+you can rehearse without touching the live one. Everyone must be on the same slot; the
+default is `main`, so in practice nobody has to think about it.
+
+The demo findings are **illustrative placeholders**, not verified research. They are written
+to be realistic in shape so the exercise can be rehearsed; replace them with what the
+breakouts actually produce. A **DEMO DATA** badge shows on `/display` and `/control` whenever
+a seeded event is loaded, so it cannot be mistaken for the real thing on the projector.
 
 ---
 
@@ -180,24 +193,25 @@ event is loaded, so it cannot be mistaken for the real thing on the projector.
 
 ### Before the session
 
-1. `/control` → **Setup**
-   - Set the event title and subtitle.
-   - Enter the real **panelist names** and starting budget (default 100 credits).
-   - Adjust the five **objectives**, their moderator prompts, and the round order.
-   - Rename breakouts if needed and **set a PIN per room**.
-2. **Event lifecycle** → **New live event**, then **Seed empty finding templates**.
-3. Print the landing page (`/`) or the individual QR codes for the table cards.
-4. Open `/display` on the projector and press **F** for fullscreen.
+1. Complete the Firebase setup above and confirm the **Sync** card says *Connected*.
+2. `/control` → **Setup**: event title, real **panelist names**, starting budget (default 100),
+   the five **objectives** and their moderator prompts, and a **PIN per breakout room**.
+3. **Event lifecycle** → **New live event**, then **Seed empty finding templates**.
+4. Print the landing page (`/`) or the individual QR codes for the table cards.
+5. Open `/display` on the projector and press **F** for fullscreen.
 
 ### During the breakouts
 
 Set the big screen to **Findings Board**. Start the countdown from the control bar if you want
 it visible in the rooms.
 
-The **Breakouts** tab shows each room's status — Not started / Drafting / Submitted — with the
-findings written so far. From here you can fix a typo, submit on a room's behalf, or **reopen**
-a submitted room. Facilitators cannot reopen their own room once submitted; that is
-deliberately the operator's call.
+The **Breakouts** tab is your live view of all five rooms at once: submission status, how many
+findings each has written, and a green **N ONLINE** badge showing how many devices actually
+have that room's page open. If a room shows *Not started* and *0 online*, they have not found
+the link — that is the single most useful thing on the screen during this phase.
+
+From here you can also fix a typo, submit on a room's behalf, or **reopen** a submitted room.
+Facilitators cannot reopen their own room once submitted; that is deliberately your call.
 
 ### During the auction
 
@@ -209,18 +223,18 @@ Switch the big screen to **Live Auction**. On the **Auction** tab:
 4. Type the **winning bid**. Validation updates as you type.
 5. **AWARD FINDING** → confirm the summary sentence → done.
 
-The board, budgets and portfolios update on every screen instantly. "Advance to the next round
-after awarding" is on by default; turn it off if several panelists buy within one round.
+Every screen updates within a few hundred milliseconds. "Advance to the next round after
+awarding" is on by default; turn it off if several panelists buy within one round.
 
-**UNDO LAST TRANSACTION** is at the top of the **Ledger** tab. Mis-hearing a bid in a loud room
-is the likeliest failure mode of the whole exercise, so undo is one click plus a confirm, and
+**UNDO LAST TRANSACTION** is at the top of the **Ledger** tab. Mis-hearing a bid in a loud
+room is the likeliest failure mode of the exercise, so undo is one click plus a confirm, and
 it fully restores the budget and returns the finding to the pool. Any earlier transaction can
 also be edited in place or deleted.
 
 ### Closing
 
-Switch the big screen to **Final Portfolios**. This mode is **two screens**, and a
-*Show summary cuts →* button appears next to the mode buttons to flip between them:
+Switch to **Final Portfolios**. This mode is **two screens**, and a *Show summary cuts →*
+button appears next to the mode buttons to flip between them:
 
 1. **The roster** — every panelist's five slots with source breakout, finding type and price,
    plus total spent, credits remaining, and their breakout spread.
@@ -228,11 +242,12 @@ Switch the big screen to **Final Portfolios**. This mode is **two screens**, and
    then highest-valued findings, most-represented breakouts, and what went undrafted.
 
 They are separate screens rather than one split view because four portfolios plus three
-summary panels cannot both stay legible from the back of a room at 16:9. No winner is
-declared unless you enable it in Setup.
+summary panels cannot both stay legible from the back of a room at 16:9. No winner is declared
+unless you enable it in Setup.
 
 Export from the toolbar on `/control`: **Findings CSV**, **Ledger CSV**, **Portfolios CSV**,
-and a **Printable summary** page (browser → Print → Save as PDF).
+and a **Printable summary** page (browser → Print → Save as PDF). All three CSVs are generated
+in the browser, so they work with no server.
 
 ---
 
@@ -241,19 +256,22 @@ and a **Printable summary** page (browser → Print → Save as PDF).
 Each room opens `/breakout/<slug>` and enters its PIN. The five cards are pre-created, one per
 finding type — Momentum, Fragility, Bottleneck, Underappreciated Opportunity, Wildcard.
 
-Each card takes a headline, what changed, evidence (one point per line), why it matters,
-confidence, and an optional dissenting view. **Everything saves automatically on blur** — there
-is no save button to forget. The ↑/↓ buttons set the group's 1–5 ranking, and **Preview on
-board** shows the cards exactly as they will project.
+Each takes a headline, what changed, evidence (one point per line), why it matters, confidence,
+and an optional dissenting view. **Everything saves automatically when you leave a field** —
+there is no save button to forget. The ↑/↓ buttons set the group's 1–5 ranking, and **Preview
+on board** shows the cards exactly as they will project.
 
-Nothing reaches the main board until the room clicks **Submit findings** and confirms. After
-that, corrections go through the operator.
+Several people can work in the same room's page at once on different devices — each field
+saves independently. Nothing reaches the main board until the room clicks **Submit findings**
+and confirms. After that, corrections go through the operator.
 
 ---
 
 ## Auction rules
 
-Enforced on the server; previewed live in the operator's form.
+Enforced inside the database transaction; previewed live in the operator's form. One
+implementation (`src/lib/derive.ts`) runs in both places, so the warning shown is exactly the
+rule applied.
 
 Hard rules, never overridable:
 
@@ -265,11 +283,32 @@ Hard rules, never overridable:
 Advisory by default:
 
 - **Budget reserve.** Before each award the app computes the credits a panelist must keep to
-  fill their remaining slots at the minimum bid. A bid that breaks that shows a warning, but is
+  fill their remaining slots at the minimum bid. A bid that breaks that shows a warning but is
   allowed — a moderator may legitimately let someone go all-in. Setup → *Block bids that break
   the budget reserve* promotes it to a hard rule.
 
 Minimum bid defaults to 1 credit and is configurable in Setup.
+
+---
+
+## Security posture — read this once
+
+Be clear-eyed about what the PINs do. This is a **static site with a public database**. The
+PINs stop an attendee wandering into the wrong room's form or idly opening the control screen.
+They are **not** a security boundary: anyone determined can read them out of the database or
+bypass the check in devtools, and `database.rules.json` as shipped allows any reader to write.
+
+That is an accepted trade for this event. The content is a policy exercise projected on a wall
+for the whole room to read, it exists for one afternoon, and the alternative — real
+authentication — adds failure modes on the day for no benefit anyone in the room would notice.
+
+If that trade is ever wrong for your use, the shape to change is in `database.rules.json`:
+add Firebase Anonymous Auth and scope writes to `auth != null`, then key any private data by
+uid segment so a `".write": "auth.uid === $uid"` rule can be added without touching the app.
+
+What the shipped rules *do* give you: writes are confined to the `neis` node, so this app
+cannot damage anything else in the same Firebase project, and nothing outside `neis` is
+readable.
 
 ---
 
@@ -282,36 +321,29 @@ npm test
 11 unit tests over the rule engine: budget arithmetic, double-sale and double-slot rejection,
 minimum bid, the reserve rule in both modes, undo restoring state exactly, editing a
 transaction excluding itself from its own checks, and a full four-panelist five-round auction
-reconciling to the correct totals.
-
-The end-to-end script walks the entire event against a running server:
+reconciling to correct totals. These are pure and need no network.
 
 ```bash
-npm run build
-npm start                  # in one terminal
-node tests/e2e.mjs http://localhost:3000
+node --import ./tests/ts-resolver.mjs tests/e2e.mjs <databaseURL>
 ```
 
-It covers access control, creating a live event, a facilitator writing and submitting findings,
-findings appearing on the board, operator reopen, twenty awards across five rounds, rule
-enforcement over HTTP, undo and re-award, SSE push delivery, all three CSV exports, the
-printable summary, and resetting the auction while keeping findings.
+42 checks against live Firebase: event round-trip, keyed-not-array storage, seeding all five
+rooms, **five rooms writing simultaneously with nothing lost**, submit and reopen, twenty
+awards across five rounds, rule enforcement against live data, undo, and resetting the auction
+while keeping findings. Cleans up after itself.
 
 ---
 
 ## Operational notes
 
-- **`data/` is gitignored.** It holds the live event. Back up `data/event.json` between the
-  breakout session and the auction — copying that one file is a complete snapshot.
-- **`data/audit.jsonl`** records every mutation with a timestamp, for reconstructing what
-  happened if there is a dispute.
-- If the state file is ever unparseable, the server moves it aside as `event.json.corrupt-<ts>`
-  and starts a fresh event rather than refusing to boot. The original is preserved.
-- `/display` accepts keyboard shortcuts: **1** Findings Board, **2** Live Auction,
-  **3** Final Portfolios, **F** fullscreen. These are a local override in case the operator's
-  machine drops off the network; the badge in the header says so, and the next change from
-  `/control` takes back over.
-- The connection indicator on every screen reads **Live** on SSE, **Reconnecting** while it
-  falls back to polling, **Offline** if it cannot reach the server at all.
+- The connection indicator on every screen reads **Live** on Firebase, **Local only** in
+  red when this browser is not syncing, and **No event** before one is created.
+- `/display` shortcuts: **1** Findings Board, **2** Live Auction, **3** Final Portfolios,
+  **F** fullscreen. These are a local override in case the operator's machine drops off the
+  network; the badge in the header says so, and the next change from `/control` takes back over.
+- Realtime Database has an export button in the console. Taking a JSON export between the
+  breakout session and the auction is a complete backup and takes about ten seconds.
+- Add `?local=1` to any URL to force local mode — useful for demoing without touching the live
+  event.
 - Colour is never the only signal. Every finding type shows its glyph and full name, and
   confidence shows both bars and text.
