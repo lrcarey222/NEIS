@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Notice, cx } from "@/components/primitives";
 import { byId, sortedObjectives, sortedPanelists } from "@/lib/derive";
-import { api } from "@/lib/useEvent";
+import { patchTransaction, undoTransaction } from "@/lib/actions";
 import type { EventState, Transaction } from "@/lib/types";
 
 /**
@@ -36,7 +36,7 @@ export function LedgerPanel({ state }: { state: EventState }) {
 
   async function undoLast() {
     setBusy(true);
-    const result = await api("/api/transactions", "DELETE", { rewindRound: rewind });
+    const result = await undoTransaction(undefined, rewind);
     setBusy(false);
     setConfirmUndo(false);
     setError(result.ok ? null : (result.error ?? "Could not undo."));
@@ -190,14 +190,11 @@ function EditTransaction({
 
   async function save() {
     setBusy(true);
-    const result = await api("/api/transactions", "PATCH", {
-      id: transaction.id,
-      panelistId,
-      objectiveId,
-      price: Number.parseInt(price, 10),
-      note,
-      acknowledgeWarnings: true,
-    });
+    const result = await patchTransaction(
+      transaction.id,
+      { panelistId, objectiveId, price: Number.parseInt(price, 10), note },
+      true,
+    );
     setBusy(false);
     if (!result.ok) setError(result.error ?? "Could not save.");
     else onDone();
@@ -205,7 +202,7 @@ function EditTransaction({
 
   async function remove() {
     setBusy(true);
-    const result = await api("/api/transactions", "DELETE", { id: transaction.id });
+    const result = await undoTransaction(transaction.id);
     setBusy(false);
     if (!result.ok) setError(result.error ?? "Could not remove.");
     else onDone();

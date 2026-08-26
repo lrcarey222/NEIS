@@ -1,41 +1,65 @@
-import { headers } from "next/headers";
+"use client";
+
+import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
+import { StatusDot } from "@/components/primitives";
 import { sortedBreakouts } from "@/lib/derive";
-import { getState } from "@/lib/store";
-
-export const dynamic = "force-dynamic";
+import { BREAKOUT_BLUEPRINT } from "@/lib/seed";
+import { useEvent } from "@/lib/useEvent";
 
 /**
  * Room landing page.
  *
  * Printed or projected between sessions so facilitators can scan straight into
- * their own workspace. The QR codes are rendered server-side as inline SVG —
- * no external image service, nothing to load over the conference network.
+ * their own workspace. QR codes are generated in the browser — there is no
+ * server in a static export, and this keeps the page working with no network
+ * beyond the page load itself.
  */
-export default async function LandingPage() {
-  const state = await getState();
-  const base = await resolveBaseUrl();
-  const breakouts = sortedBreakouts(state);
+export default function LandingPage() {
+  const { state, status } = useEvent("landing");
+  const [codes, setCodes] = useState<Record<string, string>>({});
+  const [origin, setOrigin] = useState("");
 
-  const cards = await Promise.all(
-    breakouts.map(async (breakout) => ({
-      breakout,
-      url: `${base}/breakout/${breakout.slug}`,
-      svg: await QRCode.toString(`${base}/breakout/${breakout.slug}`, {
-        type: "svg",
-        margin: 0,
-        color: { dark: "#05080c", light: "#f4f6f8" },
-      }),
-    })),
-  );
+  // The event's own breakout names once it exists; the blueprint before that,
+  // so the QR codes can be printed before anyone has created the event.
+  const breakouts = state
+    ? sortedBreakouts(state)
+    : BREAKOUT_BLUEPRINT.map((b) => ({ ...b, pin: "", submissionStatus: "not_started" as const, submittedAt: null }));
+
+  useEffect(() => {
+    const base = `${window.location.origin}${window.location.pathname}`.replace(/\/$/, "");
+    setOrigin(base);
+
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      for (const breakout of breakouts) {
+        next[breakout.slug] = await QRCode.toString(`${base}/breakout/${breakout.slug}/`, {
+          type: "svg",
+          margin: 0,
+          color: { dark: "#05080c", light: "#f4f6f8" },
+        });
+      }
+      if (!cancelled) setCodes(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Regenerate when the set of rooms changes, not on every snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breakouts.map((b) => b.slug).join(",")]);
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-6xl px-6 py-12">
       <header className="rule-signal mb-10">
-        <p className="eyebrow mb-2">{state.event.subtitle || "Live session"}</p>
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <p className="eyebrow">{state?.event.subtitle || "Live session"}</p>
+          <StatusDot status={status} />
+        </div>
         <h1 className="text-paper text-3xl leading-tight font-semibold sm:text-4xl">
-          {state.event.title}
+          {state?.event.title ?? "NEIS Strategic Findings Auction"}
         </h1>
         <p className="text-paper-mute mt-3 max-w-2xl leading-relaxed">
           Five breakouts each record five Strategic Findings. Every finding then goes to
@@ -47,15 +71,15 @@ export default async function LandingPage() {
       <section className="mb-12">
         <h2 className="eyebrow mb-4">Breakout rooms</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map(({ breakout, url, svg }) => (
+          {breakouts.map((breakout) => (
             <a
               key={breakout.id}
-              href={`/breakout/${breakout.slug}`}
+              href={`breakout/${breakout.slug}/`}
               className="panel hover:border-paper-faint flex gap-4 p-4 transition-colors"
             >
               <div
                 className="h-24 w-24 shrink-0 rounded-sm bg-[#f4f6f8] p-1.5 [&>svg]:h-full [&>svg]:w-full"
-                dangerouslySetInnerHTML={{ __html: svg }}
+                dangerouslySetInnerHTML={{ __html: codes[breakout.slug] ?? "" }}
                 aria-hidden="true"
               />
               <div className="min-w-0">
@@ -63,7 +87,7 @@ export default async function LandingPage() {
                   {breakout.name}
                 </h3>
                 <p className="text-paper-faint mt-1.5 font-mono text-[0.625rem] break-all">
-                  {url.replace(/^https?:\/\//, "")}
+                  {origin.replace(/^https?:\/\//, "")}/breakout/{breakout.slug}/
                 </p>
                 <p className="text-paper-mute mt-2 font-mono text-[0.625rem] tracking-[0.1em] uppercase">
                   PIN on your table card
@@ -78,17 +102,17 @@ export default async function LandingPage() {
         <h2 className="eyebrow mb-4">Screens</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <LinkCard
-            href="/display"
+            href="display/"
             title="Big screen display"
             hint="Findings board, live auction, final portfolios. Press F for fullscreen."
           />
           <LinkCard
-            href="/control"
+            href="control/"
             title="Operator control room"
             hint="Record auction results and drive the display. Administrator PIN required."
           />
           <LinkCard
-            href="/summary"
+            href="summary/"
             title="Printable summary"
             hint="Full results for print or PDF export at the end of the session."
           />
@@ -105,23 +129,4 @@ function LinkCard({ href, title, hint }: { href: string; title: string; hint: st
       <p className="text-paper-mute mt-1.5 text-xs leading-relaxed">{hint}</p>
     </a>
   );
-}
-
-/**
- * Prefers an explicitly configured public URL, then the proxy headers, then the
- * Host header — so the QR codes point at the address participants can actually
- * reach, including a bare LAN IP when the app runs off the operator's laptop.
- */
-async function resolveBaseUrl(): Promise<string> {
-  const configured = process.env.NEIS_PUBLIC_URL?.trim();
-  if (configured) return configured.replace(/\/$/, "");
-
-  const headerList = await headers();
-  const host =
-    headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
-  const proto =
-    headerList.get("x-forwarded-proto") ??
-    (host.startsWith("localhost") || /^\d+\.\d+\.\d+\.\d+/.test(host) ? "http" : "https");
-
-  return `${proto}://${host}`;
 }

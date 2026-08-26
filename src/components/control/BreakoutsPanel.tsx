@@ -6,7 +6,8 @@ import { FindingCard } from "@/components/FindingCard";
 import { FindingDetail } from "@/components/FindingDetail";
 import { Notice, cx } from "@/components/primitives";
 import { buildFindingView, findingsForBreakout, sortedBreakouts, type FindingView } from "@/lib/derive";
-import { api } from "@/lib/useEvent";
+import { patchBreakout } from "@/lib/actions";
+import { usePresence } from "@/lib/useEvent";
 import type { EventState, SubmissionStatus } from "@/lib/types";
 
 /**
@@ -20,9 +21,10 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
   const [error, setError] = useState<string | null>(null);
 
   const breakouts = sortedBreakouts(state);
+  const present = usePresence();
 
   async function setStatus(slug: string, submissionStatus: SubmissionStatus) {
-    const result = await api("/api/breakouts", "PATCH", { slug, submissionStatus });
+    const result = await patchBreakout(state, slug, { submissionStatus });
     setError(result.ok ? null : (result.error ?? "Could not update."));
   }
 
@@ -35,6 +37,10 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
           const findings = findingsForBreakout(state, breakout.id);
           const written = findings.filter((f) => f.headline.trim()).length;
           const isOpen = expanded === breakout.id;
+          // How many browsers currently have this room's workspace open. Tells
+          // the operator at a glance whether a table has actually found the
+          // link yet, which is the usual reason a room shows "Not started".
+          const online = present.filter((p) => p.room === `breakout:${breakout.slug}`).length;
 
           return (
             <div key={breakout.id}>
@@ -50,6 +56,14 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
                     <span className="text-paper truncate text-sm font-semibold">
                       {breakout.name}
                     </span>
+                    {online > 0 ? (
+                      <span
+                        className="border-momentum/40 text-momentum shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] font-semibold tracking-[0.1em] uppercase"
+                        title={`${online} device${online === 1 ? "" : "s"} has this room open`}
+                      >
+                        {online} online
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-paper-faint mt-1 pl-4 font-mono text-[0.625rem] tracking-[0.1em] uppercase">
                     {STATUS_LABEL[breakout.submissionStatus]} · {written}/{findings.length || 5}{" "}
@@ -78,7 +92,7 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
                   )}
                   <a
                     className="btn btn-ghost"
-                    href={`/breakout/${breakout.slug}`}
+                    href={`../breakout/${breakout.slug}/`}
                     target="_blank"
                     rel="noreferrer"
                   >

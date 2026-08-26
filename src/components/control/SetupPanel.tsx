@@ -3,20 +3,39 @@
 import { useEffect, useState } from "react";
 
 import { Notice, cx } from "@/components/primitives";
+import {
+  clearFindings,
+  createNewEvent,
+  createObjective,
+  createPanelist,
+  deleteObjective,
+  deletePanelist,
+  patchBreakout,
+  patchEvent,
+  patchObjective,
+  patchPanelist,
+  reorderObjectives,
+  resetAuction,
+  seedBlankFindings,
+  submitAllBreakouts,
+  type Result,
+} from "@/lib/actions";
 import { sortedBreakouts, sortedObjectives, sortedPanelists } from "@/lib/derive";
-import { api } from "@/lib/useEvent";
+import { adminPin } from "@/lib/localAuth";
+import { currentMode } from "@/lib/net";
 import type { EventState } from "@/lib/types";
 
 /** Pre-event configuration, plus the reset/demo tools used for rehearsal. */
 export function SetupPanel({ state }: { state: EventState }) {
   const [error, setError] = useState<string | null>(null);
-  const notify = (result: { ok: boolean; error?: string }) =>
+  const notify: Notify = (result) =>
     setError(result.ok ? null : (result.error ?? "Something went wrong."));
 
   return (
     <section className="space-y-4">
       {error ? <Notice tone="error">{error}</Notice> : null}
 
+      <ConnectionCard />
       <EventSettings state={state} notify={notify} />
       <PanelistSettings state={state} notify={notify} />
       <ObjectiveSettings state={state} notify={notify} />
@@ -26,7 +45,7 @@ export function SetupPanel({ state }: { state: EventState }) {
   );
 }
 
-type Notify = (result: { ok: boolean; error?: string }) => void;
+type Notify = (result: Result) => void;
 
 function Card({
   title,
@@ -45,6 +64,33 @@ function Card({
       </header>
       {children}
     </div>
+  );
+}
+
+/**
+ * Says plainly whether this browser is actually syncing. The single most
+ * expensive mistake available on the day is running the whole breakout session
+ * in local-only mode and discovering at the auction that no findings arrived.
+ */
+function ConnectionCard() {
+  const [mode, setMode] = useState<string>("local");
+  useEffect(() => setMode(currentMode()), []);
+
+  return (
+    <Card title="Sync" hint="Where this event is stored.">
+      {mode === "firebase" ? (
+        <Notice tone="success">
+          Connected to Firebase. Breakout rooms on other devices see the same event.
+        </Notice>
+      ) : (
+        <Notice tone="error">
+          <strong>Local only.</strong> Firebase is not configured (or the URL has{" "}
+          <code>?local=1</code>), so this event lives in this browser and nothing is shared.
+          Paste your project values into <code>src/lib/firebase-config.ts</code>, publish{" "}
+          <code>database.rules.json</code> in the Firebase console, and redeploy.
+        </Notice>
+      )}
+    </Card>
   );
 }
 
@@ -97,12 +143,12 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
         <LiveField
           label="Event title"
           value={state.event.title}
-          onCommit={(title) => void api("/api/event", "PATCH", { title }).then(notify)}
+          onCommit={(title) => void patchEvent(state, { title }).then(notify)}
         />
         <LiveField
           label="Subtitle"
           value={state.event.subtitle}
-          onCommit={(subtitle) => void api("/api/event", "PATCH", { subtitle }).then(notify)}
+          onCommit={(subtitle) => void patchEvent(state, { subtitle }).then(notify)}
         />
         <LiveField
           label="Starting budget (credits)"
@@ -115,7 +161,7 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
               : "Applies to every panelist."
           }
           onCommit={(value) =>
-            void api("/api/event", "PATCH", {
+            void patchEvent(state, {
               startingBudget: Number(value),
               applyBudgetToPanelists: true,
             }).then(notify)
@@ -126,9 +172,7 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
           type="number"
           value={state.event.minBid}
           hint="Used for the budget-reserve warning."
-          onCommit={(value) =>
-            void api("/api/event", "PATCH", { minBid: Number(value) }).then(notify)
-          }
+          onCommit={(value) => void patchEvent(state, { minBid: Number(value) }).then(notify)}
         />
       </div>
 
@@ -138,16 +182,14 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
           hint="Off by default — the operator sees a warning but can still record an all-in bid."
           checked={state.event.enforceBudgetReserve}
           onChange={(enforceBudgetReserve) =>
-            void api("/api/event", "PATCH", { enforceBudgetReserve }).then(notify)
+            void patchEvent(state, { enforceBudgetReserve }).then(notify)
           }
         />
         <Toggle
           label="Declare a leader on the Final Portfolios screen"
           hint="Off by default. Ranks by slots filled, then credits held back."
           checked={state.event.declareWinner}
-          onChange={(declareWinner) =>
-            void api("/api/event", "PATCH", { declareWinner }).then(notify)
-          }
+          onChange={(declareWinner) => void patchEvent(state, { declareWinner }).then(notify)}
         />
       </div>
     </Card>
@@ -182,25 +224,23 @@ function Toggle({
 }
 
 function PanelistSettings({ state, notify }: { state: EventState; notify: Notify }) {
-  const panelists = sortedPanelists(state);
-
   return (
     <Card title="Panelists" hint="Each starts with the event budget unless overridden.">
       <ul className="space-y-3">
-        {panelists.map((panelist) => (
+        {sortedPanelists(state).map((panelist) => (
           <li key={panelist.id} className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_7rem_auto]">
             <LiveField
               label="Name"
               value={panelist.name}
               onCommit={(name) =>
-                void api("/api/panelists", "PATCH", { id: panelist.id, name }).then(notify)
+                void patchPanelist(state, panelist.id, { name }).then(notify)
               }
             />
             <LiveField
               label="Affiliation (optional)"
               value={panelist.affiliation}
               onCommit={(affiliation) =>
-                void api("/api/panelists", "PATCH", { id: panelist.id, affiliation }).then(notify)
+                void patchPanelist(state, panelist.id, { affiliation }).then(notify)
               }
             />
             <LiveField
@@ -208,8 +248,7 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
               type="number"
               value={panelist.startingBudget}
               onCommit={(value) =>
-                void api("/api/panelists", "PATCH", {
-                  id: panelist.id,
+                void patchPanelist(state, panelist.id, {
                   startingBudget: Number(value),
                 }).then(notify)
               }
@@ -217,9 +256,7 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
             <button
               type="button"
               className="btn btn-ghost mb-0.5"
-              onClick={() =>
-                void api("/api/panelists", "DELETE", { id: panelist.id }).then(notify)
-              }
+              onClick={() => void deletePanelist(state, panelist.id).then(notify)}
             >
               Remove
             </button>
@@ -230,7 +267,7 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
       <button
         type="button"
         className="btn btn-ghost mt-4"
-        onClick={() => void api("/api/panelists", "POST", {}).then(notify)}
+        onClick={() => void createPanelist(state).then(notify)}
       >
         + Add panelist
       </button>
@@ -246,7 +283,7 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
     const target = index + direction;
     if (target < 0 || target >= ordered.length) return;
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    notify(await api("/api/objectives", "PUT", { orderedIds: ordered.map((o) => o.id) }));
+    notify(await reorderObjectives(ordered.map((o) => o.id)));
   }
 
   return (
@@ -254,17 +291,15 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
       <ul className="space-y-4">
         {objectives.map((objective, index) => (
           <li key={objective.id} className="border-ink-500 rounded-sm border p-3">
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="tabular text-signal font-mono text-sm font-bold">
                 {index + 1}
               </span>
-              <div className="flex-1">
+              <div className="min-w-40 flex-1">
                 <LiveField
                   label="Name"
                   value={objective.name}
-                  onCommit={(name) =>
-                    void api("/api/objectives", "PATCH", { id: objective.id, name }).then(notify)
-                  }
+                  onCommit={(name) => void patchObjective(objective.id, { name }).then(notify)}
                 />
               </div>
               <div className="w-36">
@@ -272,9 +307,7 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
                   label="Short label"
                   value={objective.shortName}
                   onCommit={(shortName) =>
-                    void api("/api/objectives", "PATCH", { id: objective.id, shortName }).then(
-                      notify,
-                    )
+                    void patchObjective(objective.id, { shortName }).then(notify)
                   }
                 />
               </div>
@@ -300,9 +333,7 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
                 <button
                   type="button"
                   className="btn btn-ghost px-2 py-1"
-                  onClick={() =>
-                    void api("/api/objectives", "DELETE", { id: objective.id }).then(notify)
-                  }
+                  onClick={() => void deleteObjective(state, objective.id).then(notify)}
                   aria-label="Remove objective"
                 >
                   ×
@@ -313,9 +344,7 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
             <label className="label">Moderator prompt</label>
             <PromptField
               value={objective.prompt}
-              onCommit={(prompt) =>
-                void api("/api/objectives", "PATCH", { id: objective.id, prompt }).then(notify)
-              }
+              onCommit={(prompt) => void patchObjective(objective.id, { prompt }).then(notify)}
             />
           </li>
         ))}
@@ -324,7 +353,7 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
       <button
         type="button"
         className="btn btn-ghost mt-4"
-        onClick={() => void api("/api/objectives", "POST", {}).then(notify)}
+        onClick={() => void createObjective(state).then(notify)}
       >
         + Add objective
       </button>
@@ -357,32 +386,29 @@ function PromptField({
 
 function BreakoutSettings({ state, notify }: { state: EventState; notify: Notify }) {
   return (
-    <Card title="Breakouts" hint="Names appear as the board columns. PINs unlock each room's form.">
+    <Card
+      title="Breakouts"
+      hint={`Names appear as the board columns. PINs unlock each room's form; the admin PIN (${adminPin()}) opens all of them.`}
+    >
       <ul className="space-y-3">
         {sortedBreakouts(state).map((breakout) => (
           <li key={breakout.id} className="grid items-end gap-3 sm:grid-cols-[1fr_9rem_6rem]">
             <LiveField
               label={`Name — /breakout/${breakout.slug}`}
               value={breakout.name}
-              onCommit={(name) =>
-                void api("/api/breakouts", "PATCH", { slug: breakout.slug, name }).then(notify)
-              }
+              onCommit={(name) => void patchBreakout(state, breakout.slug, { name }).then(notify)}
             />
             <LiveField
               label="Short label"
               value={breakout.shortName}
               onCommit={(shortName) =>
-                void api("/api/breakouts", "PATCH", { slug: breakout.slug, shortName }).then(
-                  notify,
-                )
+                void patchBreakout(state, breakout.slug, { shortName }).then(notify)
               }
             />
             <LiveField
               label="PIN"
               value={breakout.pin}
-              onCommit={(pin) =>
-                void api("/api/breakouts", "PATCH", { slug: breakout.slug, pin }).then(notify)
-              }
+              onCommit={(pin) => void patchBreakout(state, breakout.slug, { pin }).then(notify)}
             />
           </li>
         ))}
@@ -393,6 +419,7 @@ function BreakoutSettings({ state, notify }: { state: EventState; notify: Notify
 
 function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
   const [confirm, setConfirm] = useState("");
+  const armed = confirm.toUpperCase() === "RESET";
 
   return (
     <Card
@@ -403,22 +430,18 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
         <Action
           label="Seed empty finding templates"
           hint="Gives every breakout its five blank cards. Skips rooms that already have findings."
-          onClick={() =>
-            void api("/api/admin", "POST", { action: "seed_blank_findings" }).then(notify)
-          }
+          onClick={() => void seedBlankFindings(state).then(notify)}
         />
         <Action
           label="Submit all breakouts"
           hint="Publishes everything currently written to the board — useful mid-rehearsal."
-          onClick={() =>
-            void api("/api/admin", "POST", { action: "submit_all_breakouts" }).then(notify)
-          }
+          onClick={() => void submitAllBreakouts(state).then(notify)}
         />
         <Action
           label="Reset the auction"
           hint="Clears every transaction and returns to Round 0. Keeps all findings."
           tone="danger"
-          onClick={() => void api("/api/admin", "POST", { action: "reset_auction" }).then(notify)}
+          onClick={() => void resetAuction().then(notify)}
         />
       </div>
 
@@ -427,7 +450,8 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
           Destructive
         </p>
         <p className="text-paper-mute mb-3 text-xs leading-relaxed">
-          These replace or erase event content. Type <strong className="text-paper">RESET</strong>{" "}
+          These replace or erase event content for <strong>everyone</strong>, including any
+          breakout room currently typing. Type <strong className="text-paper">RESET</strong>{" "}
           to enable them.
         </p>
         <input
@@ -440,24 +464,18 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
           <button
             type="button"
             className="btn btn-danger"
-            disabled={confirm.toUpperCase() !== "RESET"}
-            onClick={() =>
-              void api("/api/admin", "POST", {
-                action: "clear_findings",
-                confirm,
-              }).then(notify)
-            }
+            disabled={!armed}
+            onClick={() => void clearFindings(state).then(notify)}
           >
             Clear all findings
           </button>
           <button
             type="button"
             className="btn btn-danger"
-            disabled={confirm.toUpperCase() !== "RESET"}
+            disabled={!armed}
             onClick={() =>
-              void api("/api/admin", "POST", {
-                action: "create_demo_event",
-                confirm,
+              void createNewEvent({
+                demo: true,
                 startingBudget: state.event.startingBudget,
               }).then(notify)
             }
@@ -467,11 +485,10 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
           <button
             type="button"
             className="btn btn-danger"
-            disabled={confirm.toUpperCase() !== "RESET"}
+            disabled={!armed}
             onClick={() =>
-              void api("/api/admin", "POST", {
-                action: "create_live_event",
-                confirm,
+              void createNewEvent({
+                demo: false,
                 title: state.event.title,
                 startingBudget: state.event.startingBudget,
               }).then(notify)

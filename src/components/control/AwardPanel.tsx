@@ -10,7 +10,7 @@ import {
   sortedObjectives,
   validateAward,
 } from "@/lib/derive";
-import { api } from "@/lib/useEvent";
+import { awardFinding, setRound } from "@/lib/actions";
 import type { EventState } from "@/lib/types";
 
 /**
@@ -88,7 +88,7 @@ export function AwardPanel({ state }: { state: EventState }) {
     setBusy(true);
     setError(null);
 
-    const result = await api("/api/transactions", "POST", {
+    const result = await awardFinding({
       findingId,
       panelistId,
       objectiveId,
@@ -135,7 +135,7 @@ export function AwardPanel({ state }: { state: EventState }) {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => void api("/api/event", "PATCH", { round: "prev" })}
+            onClick={() => void setRound(state, "prev")}
             disabled={state.event.currentRoundIndex < 0}
           >
             ← Prev
@@ -143,7 +143,7 @@ export function AwardPanel({ state }: { state: EventState }) {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => void api("/api/event", "PATCH", { round: "next" })}
+            onClick={() => void setRound(state, "next")}
             disabled={state.event.currentRoundIndex >= objectives.length - 1}
           >
             Next →
