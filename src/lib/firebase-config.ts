@@ -37,15 +37,18 @@ export interface FirebaseConfig {
   appId?: string;
 }
 
-export const FIREBASE_CONFIG: FirebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://PASTE_YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "PASTE_YOUR_PROJECT",
-  storageBucket: "PASTE_YOUR_PROJECT.firebasestorage.app",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID",
+export const FIREBASE_CONFIG: firebaseConfig = {
+  apiKey: "AIzaSyAeA65Me-xSNkV7M5NYP8DL1WtXtKGMnDk",
+  authDomain: "neis-climate-week.firebaseapp.com",
+  databaseURL: "https://neis-climate-week-default-rtdb.firebaseio.com",
+  projectId: "neis-climate-week",
+  storageBucket: "neis-climate-week.firebasestorage.app",
+  messagingSenderId: "913730178372",
+  appId: "1:913730178372:web:1c81b74a61b672626c1b11",
+  measurementId: "G-NR0R24KMPC"
+
 };
+
 
 /** Root node for this app, so it can share a database with other projects. */
 export const DB_ROOT = "neis";
