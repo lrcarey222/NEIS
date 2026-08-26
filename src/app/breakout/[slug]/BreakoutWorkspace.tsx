@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { FindingCard } from "@/components/FindingCard";
 import { FindingDetail } from "@/components/FindingDetail";
+import { Logo } from "@/components/Logo";
 import { PinGate } from "@/components/PinGate";
 import { CountdownDisplay } from "@/components/Timer";
 import { Notice, StatusDot, cx } from "@/components/primitives";
@@ -124,8 +125,9 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
       <header className="mb-8">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
+            <Logo className="text-paper mb-4 h-7 w-auto" />
             <p className="eyebrow">Breakout workspace</p>
-            <h1 className="text-paper mt-1 text-2xl leading-tight font-semibold sm:text-3xl">
+            <h1 className="text-paper mt-1 text-2xl leading-tight font-medium sm:text-3xl">
               {breakout.name}
             </h1>
           </div>

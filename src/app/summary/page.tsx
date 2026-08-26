@@ -7,6 +7,7 @@ import {
   sortedBreakouts,
   transactionForFinding,
 } from "@/lib/derive";
+import { Logo } from "@/components/Logo";
 import { useEvent } from "@/lib/useEvent";
 import { CONFIDENCE_META, FINDING_TYPE_META } from "@/lib/types";
 
@@ -52,6 +53,9 @@ export default function SummaryPage() {
       </div>
 
       <header className="mb-8 border-b-2 border-[#111] pb-4">
+        {/* currentColor inherits the near-black print text, so the wordmark
+            reads correctly on white without a second asset. */}
+        <Logo className="mb-5 h-11 w-auto text-[#231f20]" />
         <p className="font-mono text-[0.6875rem] font-semibold tracking-[0.16em] text-[#666] uppercase">
           {state.event.subtitle || "Strategic Findings Auction"}
         </p>

@@ -3,45 +3,63 @@
 /* ---------------------------------------------------------------------------
    NEIS Strategic Findings Auction — design tokens.
 
-   Built for a projector at the back of a large room: a deep, low-glare ground,
-   near-white text at high weight, and one accent (signal amber) reserved for
-   the thing the audience is meant to look at right now. Everything else is
-   greyscale so the accent never has to compete.
+   Matched to neiscenter.org: Roboto throughout, a neutral grey ground
+   (#111827 / #1F2937 / #374151), NEIS orange as the single accent, and square
+   corners. The greys are deliberately neutral rather than blue-tinted so the
+   brand orange and the logo swirl read as the only colour in the room.
 
-   No web fonts. A conference network is the worst possible place to discover
-   that a font CDN is unreachable, so the stack is system-only.
+   Fonts are self-hosted at build time via next/font — the exact brand typeface
+   with no runtime request to a font CDN, which is the last thing you want to
+   depend on from a conference network.
 --------------------------------------------------------------------------- */
 
 @theme {
-  --color-ink-900: #05080c;
-  --color-ink-850: #080d13;
-  --color-ink-800: #0b111a;
-  --color-ink-700: #101823;
-  --color-ink-600: #16202d;
-  --color-ink-500: #1d2937;
-  --color-ink-400: #2a3949;
+  --color-ink-900: #111827; /* page ground */
+  --color-ink-850: #151e2b;
+  --color-ink-800: #1f2937; /* panels, nav */
+  --color-ink-700: #2b3644;
+  --color-ink-600: #374151; /* raised cards */
+  --color-ink-500: #4b5563; /* hairlines */
+  --color-ink-400: #6b7280;
 
-  --color-paper: #f4f6f8;
-  --color-paper-dim: #c9d4e0;
-  --color-paper-mute: #8798aa;
-  --color-paper-faint: #5b6b7d;
+  --color-paper: #ffffff;
+  --color-paper-dim: #d1d5db;
+  --color-paper-mute: #9ca3af;
+  --color-paper-faint: #6b7280;
 
-  --color-signal: #f5b423;
-  --color-signal-dim: #8a6410;
-  --color-cyan: #34cfc4;
+  /* NEIS brand */
+  --color-signal: #f58226; /* orange — the accent */
+  --color-signal-dim: #9a5417;
+  --color-cyan: #55c4c5; /* teal */
+  --color-brand-blue: #1889b0;
+  --color-brand-green: #a3b63b;
 
-  --color-momentum: #3ecf8e;
-  --color-fragility: #f4705f;
-  --color-bottleneck: #f5b423;
-  --color-opportunity: #6ba4ff;
-  --color-wildcard: #b48bff;
+  /* Finding types, drawn from the logo palette wherever one fits. Fragility
+     has no brand equivalent and needs to read as risk, so it gets a red. The
+     blue is lifted slightly from the logo's #1889b0 to stay legible at chip
+     size on a dark ground. */
+  --color-momentum: #a3b63b;
+  --color-fragility: #e2574c;
+  --color-bottleneck: #f58226;
+  --color-opportunity: #3fa9cf;
+  --color-wildcard: #55c4c5;
 
+  /* Zeroing the radius scale squares off every `rounded-*` utility in one
+     place. `rounded-full` is not a theme token, so status dots and progress
+     bars stay circular. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  /* Set by next/font in layout.tsx, with a stack to fall back on. */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
+    var(--font-roboto), Roboto, ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Arial, sans-serif;
   --font-mono:
-    ui-monospace, "Cascadia Mono", "Cascadia Code", "Segoe UI Mono", Consolas,
-    "Liberation Mono", monospace;
+    var(--font-roboto-mono), "Roboto Mono", ui-monospace, "Cascadia Mono",
+    Consolas, monospace;
 }
 
 :root {
@@ -66,15 +84,8 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-body {
-  /* A faint engineering grid. Present enough to read as "instrumentation",
-     quiet enough that nobody notices it during a talk. */
-  background-image:
-    linear-gradient(rgba(148, 180, 214, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 180, 214, 0.028) 1px, transparent 1px);
-  background-size: 64px 64px;
-  background-attachment: fixed;
-}
+/* neiscenter.org uses flat greys with no texture, so the engineering grid the
+   earlier design carried has been dropped. */
 
 /* --- Typographic utilities ------------------------------------------------ */
 
@@ -94,10 +105,12 @@ body {
 
 /* --- Surfaces ------------------------------------------------------------- */
 
+/* Square corners throughout — the NEIS site uses a 0px radius everywhere, and
+   it is the single strongest cue that this belongs to them. */
 .panel {
-  background: color-mix(in srgb, var(--color-ink-800) 88%, transparent);
+  background: var(--color-ink-800);
   border: 1px solid var(--color-ink-500);
-  border-radius: 0.375rem;
+  border-radius: 0;
 }
 
 .hairline {
@@ -153,7 +166,7 @@ body {
   width: 100%;
   background: var(--color-ink-900);
   border: 1px solid var(--color-ink-400);
-  border-radius: 0.25rem;
+  border-radius: 0;
   padding: 0.5rem 0.625rem;
   color: var(--color-paper);
   font-size: 0.9375rem;
@@ -207,7 +220,7 @@ select.field {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.25rem;
+  border-radius: 0;
   border: 1px solid transparent;
   padding: 0.5rem 0.875rem;
   font-size: 0.875rem;
@@ -228,10 +241,11 @@ select.field {
 
 .btn-primary {
   background: var(--color-signal);
+  /* Near-black on orange, not white — white on #f58226 is only about 2.9:1. */
   color: var(--color-ink-900);
 }
 .btn-primary:not(:disabled):hover {
-  background: #ffc94a;
+  background: #f79544;
 }
 
 .btn-ghost {

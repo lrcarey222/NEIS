@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Logo } from "@/components/Logo";
 import { PinGate } from "@/components/PinGate";
 import { Notice, StatusDot, cx } from "@/components/primitives";
 import { CountdownDisplay } from "@/components/Timer";
@@ -64,18 +65,21 @@ export default function ControlPage() {
     <main className="mx-auto min-h-dvh w-full max-w-7xl px-4 py-5 sm:px-6">
       <header className="mb-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <p className="eyebrow">Control room</p>
-              {state.event.isDemo ? (
-                <span className="border-signal/50 text-signal rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] font-bold tracking-[0.14em] uppercase">
-                  Demo data
-                </span>
-              ) : null}
+          <div className="flex min-w-0 items-center gap-4">
+            <Logo className="text-paper hidden h-9 w-auto shrink-0 sm:block" />
+            <div className="border-ink-500 min-w-0 sm:border-l sm:pl-4">
+              <div className="flex items-center gap-3">
+                <p className="eyebrow">Control room</p>
+                {state.event.isDemo ? (
+                  <span className="border-signal/50 text-signal border px-1.5 py-0.5 font-mono text-[0.5625rem] font-bold tracking-[0.14em] uppercase">
+                    Demo data
+                  </span>
+                ) : null}
+              </div>
+              <h1 className="text-paper mt-1 truncate text-xl font-medium">
+                {state.event.title}
+              </h1>
             </div>
-            <h1 className="text-paper mt-1 truncate text-xl font-semibold">
-              {state.event.title}
-            </h1>
           </div>
 
           <div className="flex items-center gap-4">

@@ -323,15 +323,24 @@ Open <http://localhost:3000>. It talks to the same live Firebase project, so **b
 <summary>Working inside OneDrive or Dropbox?</summary>
 
 The sync client turns build artefacts into cloud placeholders mid-build and `next build` fails
-with `EINVAL: readlink`. Point the build somewhere unsynced — the exported site still lands in
-`./out`:
+with `EINVAL: readlink`. Point the build somewhere unsynced:
 
 ```bash
 NEXT_DIST_DIR=../../../../neis-build npm run build
 ```
 
 On Windows PowerShell: `$env:NEXT_DIST_DIR="../../../../neis-build"; npm run build`.
-Also stop anything serving `out/` first, or the rebuild fails with `EBUSY`. CI is unaffected.
+
+The path must be **relative** — Next joins it onto the project root, so an absolute path fails at
+the export step. And note that with `output: export` the finished site lands **inside that
+directory**, not in `./out`, so serve it from there:
+
+```bash
+cd ../../../../neis-build && python -m http.server 3200
+```
+
+Stop anything already serving the output before rebuilding, or it fails with `EBUSY`. CI does not
+set this variable and is unaffected.
 
 </details>
 

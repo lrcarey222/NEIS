@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { attemptLogin } from "@/lib/localAuth";
 import type { EventState, Role } from "@/lib/types";
+import { Logo } from "./Logo";
 import { Notice } from "./primitives";
 
 /**
@@ -46,8 +47,9 @@ export function PinGate({
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <form onSubmit={submit} className="panel w-full max-w-sm p-8">
+        <Logo className="text-paper mb-7 h-8 w-auto" />
         <div className="rule-signal mb-6">
-          <h1 className="text-paper text-xl leading-tight font-semibold">{title}</h1>
+          <h1 className="text-paper text-xl leading-tight font-medium">{title}</h1>
           <p className="text-paper-mute mt-2 text-sm leading-relaxed">{hint}</p>
         </div>
 

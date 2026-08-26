@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 
+import { Logo } from "@/components/Logo";
 import { StatusDot } from "@/components/primitives";
 import { sortedBreakouts } from "@/lib/derive";
 import { BREAKOUT_BLUEPRINT } from "@/lib/seed";
@@ -53,14 +54,17 @@ export default function LandingPage() {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-6xl px-6 py-12">
-      <header className="rule-signal mb-10">
-        <div className="mb-2 flex items-center justify-between gap-4">
-          <p className="eyebrow">{state?.event.subtitle || "Live session"}</p>
+      <header className="mb-10">
+        <div className="mb-8 flex items-center justify-between gap-4">
+          <Logo className="text-paper h-12 w-auto sm:h-14" />
           <StatusDot status={status} />
         </div>
-        <h1 className="text-paper text-3xl leading-tight font-semibold sm:text-4xl">
-          {state?.event.title ?? "NEIS Strategic Findings Auction"}
-        </h1>
+        <div className="rule-signal">
+          <p className="eyebrow mb-2">{state?.event.subtitle || "Live session"}</p>
+          <h1 className="text-paper text-3xl leading-tight font-medium sm:text-4xl">
+            {state?.event.title ?? "NEIS Strategic Findings Auction"}
+          </h1>
+        </div>
         <p className="text-paper-mute mt-3 max-w-2xl leading-relaxed">
           Five breakouts each record five Strategic Findings. Every finding then goes to
           auction against five strategic objectives. Scan your room&apos;s code to open its

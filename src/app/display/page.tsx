@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { FindingDetail } from "@/components/FindingDetail";
+import { Logo } from "@/components/Logo";
 import { StatusDot, cx } from "@/components/primitives";
 import { CountdownDisplay } from "@/components/Timer";
 import { AuctionMode } from "@/components/display/AuctionMode";
@@ -73,13 +74,16 @@ export default function DisplayPage() {
   return (
     <main className="display-root flex h-dvh flex-col overflow-hidden">
       <header className="flex shrink-0 items-center justify-between gap-[2em] px-[1.75em] pt-[1.25em] pb-[1em]">
-        <div className="flex items-baseline gap-[1em]">
-          <div>
-            <h1 className="text-paper text-[1.125em] leading-none font-semibold tracking-tight">
+        <div className="flex items-center gap-[1.25em]">
+          {/* The projector header is the one place the brand has to be
+              unmistakable from the back of the room. */}
+          <Logo className="text-paper h-[2.1em] w-auto shrink-0" />
+          <div className="border-ink-500 border-l pl-[1.25em]">
+            <h1 className="text-paper text-[1.125em] leading-none font-medium">
               {state.event.title}
             </h1>
             {state.event.subtitle ? (
-              <p className="text-paper-faint mt-[0.35em] font-mono text-[0.625em] tracking-[0.16em] uppercase">
+              <p className="text-paper-mute mt-[0.4em] font-mono text-[0.625em] tracking-[0.16em] uppercase">
                 {state.event.subtitle}
               </p>
             ) : null}
