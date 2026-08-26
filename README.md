@@ -1,5 +1,7 @@
 # NEIS Strategic Findings Auction
 
+**Live: <https://lrcarey222.github.io/NEIS/>**
+
 A live-event web app for the NEIS session at NYC Climate Week.
 
 Five breakout groups each record five Strategic Findings **at the same time, from their own
