@@ -108,7 +108,7 @@ export default function LandingPage() {
           <LinkCard
             href="display/"
             title="Big screen display"
-            hint="Findings board, live auction, final portfolios. Press F for fullscreen."
+            hint="Instructions, findings board, live auction, final portfolios. Press F for fullscreen."
           />
           <LinkCard
             href="control/"

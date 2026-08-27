@@ -8,6 +8,7 @@ import { StatusDot, cx } from "@/components/primitives";
 import { CountdownDisplay } from "@/components/Timer";
 import { AuctionMode } from "@/components/display/AuctionMode";
 import { BoardMode } from "@/components/display/BoardMode";
+import { InstructionsMode } from "@/components/display/InstructionsMode";
 import { PortfoliosMode } from "@/components/display/PortfoliosMode";
 import type { FindingView } from "@/lib/derive";
 import { useEvent } from "@/lib/useEvent";
@@ -16,10 +17,10 @@ import type { DisplayMode } from "@/lib/types";
 /**
  * The projected screen.
  *
- * Which of the three modes is showing is server state, set by the operator, so
+ * Which of the four modes is showing is server state, set by the operator, so
  * the projector follows /control without anyone touching the presenting laptop.
- * Keys 1/2/3 switch modes locally as a fallback if the operator's machine drops
- * off the network mid-session.
+ * Keys 1/2/3/4 switch modes locally as a fallback if the operator's machine
+ * drops off the network mid-session.
  */
 export default function DisplayPage() {
   const { state, status } = useEvent("display");
@@ -39,6 +40,7 @@ export default function DisplayPage() {
       if (event.key === "1") setModeOverride("board");
       if (event.key === "2") setModeOverride("auction");
       if (event.key === "3") setModeOverride("portfolios");
+      if (event.key === "4") setModeOverride("instructions");
       if (event.key === "f" || event.key === "F") {
         if (document.fullscreenElement) void document.exitFullscreen();
         else void document.documentElement.requestFullscreen().catch(() => {});
@@ -102,7 +104,9 @@ export default function DisplayPage() {
         </div>
       </header>
 
-      {mode === "board" ? (
+      {mode === "instructions" ? (
+        <InstructionsMode state={state} />
+      ) : mode === "board" ? (
         <BoardMode state={state} onOpenFinding={openFinding} />
       ) : mode === "auction" ? (
         <AuctionMode state={state} onOpenFinding={openFinding} />
@@ -126,6 +130,7 @@ function ModeIndicator({
     board: "Findings Board",
     auction: "Live Auction",
     portfolios: "Final Portfolios",
+    instructions: "Instructions",
   };
 
   return (

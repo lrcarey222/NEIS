@@ -16,7 +16,7 @@ sync live across devices.
 | Screen | URL | PIN |
 | --- | --- | --- |
 | **Operator control room** | [`/control/`](https://lrcarey222.github.io/NEIS/control/) | `2026` |
-| **Big screen display** | [`/display/`](https://lrcarey222.github.io/NEIS/display/) | none — public |
+| **Big screen display** | [`/display/`](https://lrcarey222.github.io/NEIS/display/) — instructions, findings board, auction, portfolios | none — public |
 | **Breakout workspace** | [`/breakout/manufacturing/`](https://lrcarey222.github.io/NEIS/breakout/manufacturing/) · [`auto`](https://lrcarey222.github.io/NEIS/breakout/auto/) · [`clean-firm`](https://lrcarey222.github.io/NEIS/breakout/clean-firm/) · [`grid`](https://lrcarey222.github.io/NEIS/breakout/grid/) · [`ai`](https://lrcarey222.github.io/NEIS/breakout/ai/) | `1234` |
 | **Printable summary** | [`/summary/`](https://lrcarey222.github.io/NEIS/summary/) | none |
 | **Landing page + QR codes** | [`/`](https://lrcarey222.github.io/NEIS/) | none |
@@ -47,6 +47,21 @@ sync live across devices.
 
 4. Print the landing page (`/`) or the individual QR codes for the table cards
 5. Open `/display/` on the projector and press **F** for fullscreen
+6. Set the big screen to **Instructions** while the room is being seated
+
+## 1a. Briefing the room
+
+The **Instructions** screen is the projected briefing: a QR code and PIN for every
+breakout, the five finding types, what submitting does, and the five objectives the panel will
+bid against. Leave it up while people find their tables and while the moderator explains the
+exercise — it is the fastest way to fix the room that has not found its link.
+
+It reads the live event, so renamed breakouts and edited PINs appear on it immediately, and the
+QR codes carry `?event=rehearsal` through when the projector is on the rehearsal slot.
+
+> **It projects the room PINs.** That is deliberate — everyone who can read the screen is in the
+> room — but `/display/` is a public URL, so anyone with the link sees them too. See
+> [Security posture](#security-posture); switch to another mode if that matters to you.
 
 ## 2. During the breakouts
 
@@ -403,7 +418,7 @@ segment so a `".write": "auth.uid === $uid"` rule can be added without touching 
 - The connection indicator on every screen reads **Live** on Firebase, **Local only** in red when
   this browser is not syncing, and **No event** before one is created.
 - `/display/` shortcuts: **1** Findings Board, **2** Live Auction, **3** Final Portfolios,
-  **F** fullscreen. These are a local override in case the operator's machine drops off the
+  **4** Instructions, **F** fullscreen. These are a local override in case the operator's machine drops off the
   network; the badge in the header says so, and the next change from `/control/` takes back over.
 - Colour is never the only signal. Every finding type shows its glyph and full name, and
   confidence shows both bars and text.

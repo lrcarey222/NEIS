@@ -247,7 +247,9 @@ function DisplayControls({ state }: { state: EventState }) {
   const [minutes, setMinutes] = useState("20");
   const [label, setLabel] = useState(state.timer.label);
 
+  // Chronological order — Instructions is the screen the room sees first.
   const modes: { key: DisplayMode; label: string }[] = [
+    { key: "instructions", label: "Instructions" },
     { key: "board", label: "Findings Board" },
     { key: "auction", label: "Live Auction" },
     { key: "portfolios", label: "Final Portfolios" },
