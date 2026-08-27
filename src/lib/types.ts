@@ -27,7 +27,13 @@ export const SUBMISSION_STATUSES = [
 ] as const;
 export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
-export const DISPLAY_MODES = ["board", "auction", "portfolios"] as const;
+export const DISPLAY_MODES = [
+  "board",
+  "auction",
+  "portfolios",
+  /** The pre-session briefing: how to join, what to write, what happens next. */
+  "instructions",
+] as const;
 export type DisplayMode = (typeof DISPLAY_MODES)[number];
 
 export const EVENT_STATUSES = [
