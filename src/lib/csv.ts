@@ -1,7 +1,9 @@
 import {
   allFindingViews,
   allPanelistViews,
+  buildAudienceSummary,
   byId,
+  entrySpend,
   sortedBreakouts,
 } from "./derive";
 import {
@@ -44,11 +46,16 @@ export function downloadCsv(filename: string, body: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-// --- The three exports -----------------------------------------------------
+// --- The four exports ------------------------------------------------------
 
-/** Every finding with its auction outcome attached — the master sheet. */
+/**
+ * Every finding with its auction outcome and the room's verdict attached — the
+ * master sheet, and the one worth keeping after the event.
+ */
 export function findingsCsv(state: EventState): string {
   const order = new Map(sortedBreakouts(state).map((b, i) => [b.id, i]));
+  const audience = buildAudienceSummary(state);
+  const stats = new Map(audience.stats.map((stat) => [stat.finding.id, stat]));
 
   const rows = allFindingViews(state)
     .sort(
@@ -56,22 +63,29 @@ export function findingsCsv(state: EventState): string {
         (order.get(a.finding.breakoutId) ?? 0) - (order.get(b.finding.breakoutId) ?? 0) ||
         a.finding.breakoutRank - b.finding.breakoutRank,
     )
-    .map((view) => [
-      view.breakout?.name ?? "",
-      FINDING_TYPE_META[view.finding.type].label,
-      view.finding.breakoutRank,
-      view.finding.headline,
-      view.finding.whatChanged,
-      view.finding.evidence,
-      view.finding.whyItMatters,
-      CONFIDENCE_META[view.finding.confidence].short,
-      view.finding.dissent,
-      view.finding.submitted ? "yes" : "no",
-      view.isDrafted ? "yes" : "no",
-      view.panelist?.name ?? "",
-      view.objective?.name ?? "",
-      view.transaction?.price ?? "",
-    ]);
+    .map((view) => {
+      const stat = stats.get(view.finding.id);
+      return [
+        view.breakout?.name ?? "",
+        FINDING_TYPE_META[view.finding.type].label,
+        view.finding.breakoutRank,
+        view.finding.headline,
+        view.finding.whatChanged,
+        view.finding.evidence,
+        view.finding.whyItMatters,
+        CONFIDENCE_META[view.finding.confidence].short,
+        view.finding.dissent,
+        view.finding.submitted ? "yes" : "no",
+        view.isDrafted ? "yes" : "no",
+        view.panelist?.name ?? "",
+        view.panelist?.role ?? "",
+        view.transaction?.price ?? "",
+        stat?.total ?? "",
+        stat?.backers ?? "",
+        stat ? stat.average.toFixed(2) : "",
+        stat ? stat.delta.toFixed(2) : "",
+      ];
+    });
 
   return toCsv(
     [
@@ -87,8 +101,12 @@ export function findingsCsv(state: EventState): string {
       "Submitted",
       "Drafted",
       "Winning Panelist",
-      "Strategic Objective",
+      "Panelist Role",
       "Price Paid",
+      "Audience Credits",
+      "Audience Backers",
+      "Audience Average",
+      "Audience minus Panel",
     ],
     rows,
   );
@@ -98,18 +116,29 @@ export function findingsCsv(state: EventState): string {
 export function transactionsCsv(state: EventState): string {
   const findings = byId(state.findings);
   const panelists = byId(state.panelists);
-  const objectives = byId(state.objectives);
   const breakouts = byId(state.breakouts);
+
+  // Each panelist's picks are numbered in the order they won them, which is
+  // the only positional meaning a pick has.
+  const pickNumbers = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const t of [...state.transactions].sort((a, b) => a.timestamp - b.timestamp)) {
+    const next = (counts.get(t.panelistId) ?? 0) + 1;
+    counts.set(t.panelistId, next);
+    pickNumbers.set(t.id, next);
+  }
 
   const rows = [...state.transactions]
     .sort((a, b) => a.timestamp - b.timestamp)
     .map((t, index) => {
       const finding = findings.get(t.findingId);
+      const panelist = panelists.get(t.panelistId);
       return [
         index + 1,
         new Date(t.timestamp).toISOString(),
-        objectives.get(t.objectiveId)?.name ?? "",
-        panelists.get(t.panelistId)?.name ?? "",
+        panelist?.name ?? "",
+        panelist?.role ?? "",
+        pickNumbers.get(t.id) ?? "",
         t.price,
         finding?.headline ?? "",
         finding ? FINDING_TYPE_META[finding.type].label : "",
@@ -122,8 +151,9 @@ export function transactionsCsv(state: EventState): string {
     [
       "Order",
       "Timestamp (UTC)",
-      "Strategic Objective",
       "Winning Panelist",
+      "Panelist Role",
+      "Their Pick #",
       "Price",
       "Finding",
       "Finding Type",
@@ -134,16 +164,18 @@ export function transactionsCsv(state: EventState): string {
   );
 }
 
-/** One row per panelist-objective slot, including the ones left OPEN. */
+/** One row per pick, including the ones left OPEN. */
 export function portfoliosCsv(state: EventState): string {
   const rows = allPanelistViews(state).flatMap((view) =>
     view.slots.map((slot) => [
       view.panelist.name,
       view.panelist.affiliation,
+      view.panelist.role,
+      view.panelist.rolePrompt,
       view.startingBudget,
       view.spent,
       view.remaining,
-      slot.objective.name,
+      slot.index,
       slot.finding?.headline ?? "OPEN",
       slot.breakout?.name ?? "",
       slot.finding ? FINDING_TYPE_META[slot.finding.type].label : "",
@@ -155,14 +187,64 @@ export function portfoliosCsv(state: EventState): string {
     [
       "Panelist",
       "Affiliation",
+      "Role",
+      "Action Prompt",
       "Starting Budget",
       "Total Spent",
       "Credits Remaining",
-      "Strategic Objective",
+      "Pick #",
       "Finding",
       "Breakout",
       "Finding Type",
       "Price Paid",
+    ],
+    rows,
+  );
+}
+
+/**
+ * One row per audience member, with what they backed.
+ *
+ * Allocations are flattened into a single cell rather than a column per
+ * finding: 25 mostly-empty columns is unreadable in Excel, and the per-finding
+ * aggregates already live in the findings sheet.
+ */
+export function audienceCsv(state: EventState): string {
+  const findings = byId(state.findings);
+
+  const rows = [...state.audience]
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((entry) => {
+      const picks = Object.entries(entry.allocations)
+        .sort(([, a], [, b]) => b - a)
+        .map(
+          ([findingId, credits]) =>
+            `${credits} — ${findings.get(findingId)?.headline ?? findingId}`,
+        );
+      return [
+        entry.name,
+        entry.affiliation,
+        entry.role,
+        entry.submitted ? "yes" : "no",
+        new Date(entry.createdAt).toISOString(),
+        state.event.audienceBudget,
+        entrySpend(entry),
+        picks.length,
+        picks.join("\n"),
+      ];
+    });
+
+  return toCsv(
+    [
+      "Name",
+      "Organisation",
+      "Role",
+      "Submitted",
+      "Joined (UTC)",
+      "Budget",
+      "Credits Allocated",
+      "Findings Backed",
+      "Allocations",
     ],
     rows,
   );

@@ -66,9 +66,9 @@ export default function LandingPage() {
           </h1>
         </div>
         <p className="text-paper-mute mt-3 max-w-2xl leading-relaxed">
-          Five breakouts each record five Strategic Findings. Every finding then goes to
-          auction against five strategic objectives. Scan your room&apos;s code to open its
-          workspace.
+          Five breakouts each record five Strategic Findings. A panel of experts then bids
+          for them — each drafting the strongest set for the question their role is
+          answering. Scan your room&apos;s code to open its workspace.
         </p>
       </header>
 

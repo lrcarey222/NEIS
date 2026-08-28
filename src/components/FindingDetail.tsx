@@ -37,7 +37,7 @@ export function FindingDetail({
 
   if (!view) return null;
 
-  const { finding, breakout, panelist, objective, transaction, isDrafted } = view;
+  const { finding, breakout, panelist, transaction, isDrafted } = view;
   const meta = FINDING_TYPE_META[finding.type];
 
   return (
@@ -95,11 +95,13 @@ export function FindingDetail({
                   </dd>
                 </div>
                 <div>
+                  {/* The lens they were drafting through is the whole reason
+                      this pick is interesting, so it sits beside the price. */}
                   <dt className="text-paper-faint text-[0.6875rem] tracking-wide uppercase">
-                    Objective
+                    Drafting as
                   </dt>
                   <dd className="text-paper mt-1 text-base font-semibold">
-                    {objective?.name ?? "—"}
+                    {panelist?.role || "—"}
                   </dd>
                 </div>
                 <div>

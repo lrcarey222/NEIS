@@ -2,6 +2,7 @@
 
 import {
   allPanelistViews,
+  buildAudienceSummary,
   buildSummary,
   findingsForBreakout,
   sortedBreakouts,
@@ -33,6 +34,7 @@ export default function SummaryPage() {
 
   const panelists = allPanelistViews(state);
   const summary = buildSummary(state);
+  const audience = buildAudienceSummary(state);
   const breakouts = sortedBreakouts(state);
 
   return (
@@ -85,16 +87,27 @@ export default function SummaryPage() {
                 </h3>
                 <p className="font-mono text-xs text-[#555]">
                   spent {view.spent} · remaining {view.remaining} · {view.filledCount}/
-                  {view.slots.length} slots
+                  {view.slots.length} picks
                 </p>
               </header>
+
+              {/* The brief this portfolio was drafted against. Without it the
+                  table below is just a list of findings. */}
+              {view.panelist.role ? (
+                <p className="mb-2 text-sm text-[#444]">
+                  <span className="font-semibold">{view.panelist.role}</span>
+                  {view.panelist.rolePrompt ? (
+                    <span className="italic"> — {view.panelist.rolePrompt}</span>
+                  ) : null}
+                </p>
+              ) : null}
 
               <table className="w-full border-collapse text-sm">
                 <tbody>
                   {view.slots.map((slot) => (
-                    <tr key={slot.objective.id} className="border-t border-[#e5e5e5]">
-                      <td className="w-48 py-1.5 pr-3 align-top font-mono text-[0.625rem] tracking-wide text-[#666] uppercase">
-                        {slot.objective.name}
+                    <tr key={slot.index} className="border-t border-[#e5e5e5]">
+                      <td className="w-20 py-1.5 pr-3 align-top font-mono text-[0.625rem] tracking-wide text-[#666] uppercase">
+                        Pick {slot.index}
                       </td>
                       <td className="py-1.5 pr-3 align-top">
                         {slot.finding ? (
@@ -138,7 +151,8 @@ export default function SummaryPage() {
                 <span className="flex-1">
                   <span className="font-medium">{view.finding.headline}</span>
                   <span className="block text-xs text-[#666]">
-                    {view.breakout?.name} · {view.panelist?.name} · {view.objective?.name}
+                    {view.breakout?.name} · {view.panelist?.name}
+                    {view.panelist?.role ? ` (${view.panelist.role})` : ""}
                   </span>
                 </span>
                 <span className="w-12 shrink-0 text-right font-mono font-bold">
@@ -174,6 +188,57 @@ export default function SummaryPage() {
           </tbody>
         </table>
       </section>
+
+      {/* Audience vs panel */}
+      {audience.submitted > 0 ? (
+        <section className="mb-10 break-inside-avoid">
+          <h2 className="mb-1 border-b border-[#ccc] pb-1 text-lg font-bold">
+            Audience vs panel
+          </h2>
+          <p className="mb-3 text-xs text-[#666]">
+            {audience.submitted} portfolios from the room, {state.event.audienceBudget}{" "}
+            credits each. The audience figure is credits per participant — including the
+            people who gave a finding nothing — so it compares directly with a price paid.
+          </p>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-[#ccc] text-left font-mono text-[0.625rem] tracking-wide text-[#666] uppercase">
+                <th className="py-1.5">Finding</th>
+                <th className="py-1.5 text-right">Room avg</th>
+                <th className="py-1.5 text-right">Backers</th>
+                <th className="py-1.5 text-right">Panel paid</th>
+                <th className="py-1.5 text-right">Gap</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audience.stats
+                .filter((stat) => stat.total > 0)
+                .slice(0, 15)
+                .map((stat) => (
+                  <tr key={stat.finding.id} className="border-b border-[#eee]">
+                    <td className="py-1.5 pr-3">
+                      {stat.finding.headline}
+                      <span className="block text-xs text-[#666]">
+                        {stat.breakout?.name}
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right font-mono">
+                      {stat.average.toFixed(1)}
+                    </td>
+                    <td className="py-1.5 text-right font-mono">{stat.backers}</td>
+                    <td className="py-1.5 text-right font-mono">
+                      {stat.panelPrice ?? "—"}
+                    </td>
+                    <td className="py-1.5 text-right font-mono font-bold">
+                      {stat.delta > 0 ? "+" : ""}
+                      {stat.delta.toFixed(1)}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       {/* Full findings record */}
       <section>

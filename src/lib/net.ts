@@ -238,10 +238,36 @@ function localAdapter(key: string): Adapter {
     // The array-backed collections are addressed as `findings/<id>/<field>`,
     // matching the Firebase paths exactly so both adapters accept the same
     // calls from the action layer.
+    //
+    // Every array on EventState has to be listed here. A collection that is
+    // missing does not error — it falls through to the scalar branch below and
+    // sets a string key on an array, which `toMap` then drops on the way to
+    // storage. The write appears to succeed and the data is simply gone.
     const [collection, id, ...rest] = parts;
-    const collections = ["breakouts", "findings", "panelists", "objectives", "transactions"];
+    const collections = [
+      "breakouts",
+      "findings",
+      "panelists",
+      "transactions",
+      "audience",
+    ];
 
     if (collections.includes(collection)) {
+      // Whole-collection write: `findings: null` to clear, or a keyed map to
+      // replace. Firebase treats these as ordinary values at that path, so the
+      // local adapter has to as well or "clear all findings" silently does
+      // nothing here.
+      if (id === undefined) {
+        const replacement =
+          value && typeof value === "object"
+            ? Object.entries(value as Record<string, { id?: string }>).map(
+                ([recordId, record]) => ({ ...record, id: record.id ?? recordId }),
+              )
+            : [];
+        (state as unknown as Record<string, unknown>)[collection] = replacement;
+        return;
+      }
+
       const list = state[collection as keyof EventState] as unknown as {
         id: string;
         [k: string]: unknown;

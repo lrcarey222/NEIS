@@ -6,7 +6,9 @@ import { cx } from "@/components/primitives";
 import { FINDING_TYPE_META } from "@/lib/types";
 import {
   allPanelistViews,
+  buildFindingView,
   buildSummary,
+  roundCount,
   type FindingView,
   type PanelistView,
 } from "@/lib/derive";
@@ -15,9 +17,12 @@ import type { EventState } from "@/lib/types";
 /**
  * Mode 3 — Final Portfolios.
  *
- * Every panelist's five slots side by side, then the three summary cuts the
+ * Every panelist's picks side by side, then the three summary cuts the
  * moderator uses to close the session: what the room paid most for, which
  * breakouts got drafted, and what nobody wanted.
+ *
+ * Each card leads with the role and its question, because a free-form draft is
+ * only judgeable against what the panelist was trying to build.
  */
 export function PortfoliosMode({
   state,
@@ -28,6 +33,7 @@ export function PortfoliosMode({
 }) {
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const summary = useMemo(() => buildSummary(state), [state]);
+  const rounds = roundCount(state);
 
   return (
     // Two full screens, not one split screen: the roster and the summary cuts
@@ -39,7 +45,7 @@ export function PortfoliosMode({
         <h2 className="text-paper mt-[0.15em] text-[1.75em] leading-none font-semibold">
           {state.event.showSummary
             ? "Where the credits went"
-            : "Five findings, five strategic objectives"}
+            : `${rounds} findings each, drafted through ${panelists.length} lenses`}
         </h2>
       </div>
 
@@ -239,7 +245,14 @@ function PortfolioCard({
             <h3 className="text-paper truncate text-[1em] leading-tight font-semibold">
               {view.panelist.name}
             </h3>
-            {view.panelist.affiliation ? (
+            {view.panelist.role ? (
+              <p className="text-signal mt-[0.15em] truncate font-mono text-[0.625em] font-semibold tracking-[0.1em] uppercase">
+                {view.panelist.role}
+                {view.panelist.affiliation ? (
+                  <span className="text-paper-faint"> · {view.panelist.affiliation}</span>
+                ) : null}
+              </p>
+            ) : view.panelist.affiliation ? (
               <p className="text-paper-faint truncate text-[0.6875em]">
                 {view.panelist.affiliation}
               </p>
@@ -252,41 +265,38 @@ function PortfolioCard({
           ) : null}
         </div>
 
+        {/* The brief this portfolio should be judged against. */}
+        {view.panelist.rolePrompt ? (
+          <p className="text-paper-mute mt-[0.4em] line-clamp-3 text-[0.625em] leading-snug italic">
+            {view.panelist.rolePrompt}
+          </p>
+        ) : null}
+
         <dl className="mt-[0.6em] grid grid-cols-3 gap-[0.4em]">
           <Stat label="Spent" value={view.spent} />
           <Stat label="Left" value={view.remaining} accent />
-          <Stat label="Slots" value={`${view.filledCount}/${view.slots.length}`} />
+          <Stat label="Picks" value={`${view.filledCount}/${view.slots.length}`} />
         </dl>
       </header>
 
       <ol className="flex flex-1 flex-col gap-[0.4em] p-[0.6em]">
         {view.slots.map((slot) => (
           <li
-            key={slot.objective.id}
+            key={slot.index}
             data-type={slot.finding?.type}
             className={cx(
               "flex flex-1 flex-col rounded-sm px-[0.55em] py-[0.5em]",
               slot.finding ? "type-bar bg-ink-700" : "border-ink-500 border border-dashed",
             )}
           >
-            <p className="text-paper-faint font-mono text-[0.5625em] leading-tight font-semibold tracking-[0.1em] uppercase">
-              {slot.objective.name}
+            <p className="text-paper-faint tabular font-mono text-[0.5625em] leading-tight font-semibold tracking-[0.1em] uppercase">
+              Pick {slot.index}
             </p>
 
             {slot.finding && slot.transaction ? (
               <button
                 type="button"
-                onClick={() =>
-                  onOpenFinding({
-                    finding: slot.finding!,
-                    breakout: slot.breakout,
-                    transaction: slot.transaction,
-                    panelist: view.panelist,
-                    objective: slot.objective,
-                    isDrafted: true,
-                    isAvailable: false,
-                  })
-                }
+                onClick={() => onOpenFinding(buildFindingView(state, slot.finding!))}
                 className="mt-[0.3em] w-full text-left"
               >
                 <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">

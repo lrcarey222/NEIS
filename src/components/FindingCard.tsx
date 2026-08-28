@@ -23,7 +23,7 @@ export function FindingCard({
   /** Play the "leaving the board" animation — set briefly after a sale. */
   soldAnimation?: boolean;
 }) {
-  const { finding, isDrafted, panelist, objective, transaction } = view;
+  const { finding, isDrafted, panelist, transaction } = view;
   const interactive = Boolean(onOpen);
 
   return (
@@ -100,19 +100,19 @@ export function FindingCard({
             "border-ink-500 border-t",
             compact ? "mt-[0.35em] pt-[0.35em]" : "mt-2.5 pt-2",
           )}
-          // On the board the objective goes in the tooltip rather than a second
-          // line: buyer and price are what the room reads at a glance, and the
-          // full record is one click away in the detail panel.
-          title={objective ? `Purchased for ${objective.name}` : undefined}
+          // On the board the buyer's role goes in the tooltip rather than a
+          // second line: name and price are what the room reads at a glance,
+          // and the full record is one click away in the detail panel.
+          title={panelist.role ? `Drafted by ${panelist.name} as ${panelist.role}` : undefined}
         >
           <p className="text-paper-dim truncate text-[0.75em] leading-tight font-medium">
             {panelist.name}
             <span className="text-paper-faint"> · </span>
             <span className="tabular text-signal">{transaction?.price}</span>
-            {compact ? null : (
+            {compact || !panelist.role ? null : (
               <>
                 <span className="text-paper-faint"> · </span>
-                <span className="text-paper-faint">{objective?.name}</span>
+                <span className="text-paper-faint">{panelist.role}</span>
               </>
             )}
           </p>

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { Notice, TypeChip, cx } from "@/components/primitives";
+import { Notice, RoleChip, TypeChip, cx } from "@/components/primitives";
 import {
   allPanelistViews,
   availableFindings,
-  currentObjective,
-  sortedObjectives,
+  roundCount,
+  roundNumbers,
   validateAward,
 } from "@/lib/derive";
 import { awardFinding, setRound } from "@/lib/actions";
@@ -18,35 +18,34 @@ import type { EventState } from "@/lib/types";
  *
  * Design constraints come straight from the room: bidding ends, and the
  * operator has a few seconds to record the result before the moderator moves
- * on. So the objective is pre-selected from the current round, the finding list
- * is type-to-filter, panelists are one click each, and the whole thing is four
- * inputs and a confirm.
+ * on. So the finding list is type-to-filter, panelists are one click each, and
+ * the whole thing is three inputs and a confirm.
  *
- * Validation runs on every keystroke against the same function the server uses,
- * so the operator sees a problem before committing rather than as a rejection.
+ * There is no slot to choose. A panelist's team is just their picks in the
+ * order they won them, so the award lands in the next open position by
+ * itself — one less decision under time pressure, and one less thing to get
+ * wrong.
+ *
+ * Validation runs on every keystroke against the same function the database
+ * transaction uses, so the operator sees a problem before committing rather
+ * than as a rejection.
  */
 export function AwardPanel({ state }: { state: EventState }) {
-  const objectives = sortedObjectives(state);
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const available = useMemo(() => availableFindings(state), [state]);
-  const round = currentObjective(state);
+  const rounds = roundCount(state);
+  const roundIndex = state.event.currentRoundIndex;
 
-  const [objectiveId, setObjectiveId] = useState(round?.id ?? objectives[0]?.id ?? "");
   const [findingId, setFindingId] = useState("");
   const [panelistId, setPanelistId] = useState("");
   const [price, setPrice] = useState("");
   const [filter, setFilter] = useState("");
-  const [advanceRound, setAdvanceRound] = useState(true);
+  const [advance, setAdvance] = useState(true);
 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-
-  // Follow the operator's own round controls so the objective is right by default.
-  useEffect(() => {
-    if (round?.id) setObjectiveId(round.id);
-  }, [round?.id]);
 
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -61,20 +60,14 @@ export function AwardPanel({ state }: { state: EventState }) {
 
   const selectedFinding = available.find((v) => v.finding.id === findingId) ?? null;
   const selectedPanelist = panelists.find((p) => p.panelist.id === panelistId) ?? null;
-  const selectedObjective = objectives.find((o) => o.id === objectiveId) ?? null;
 
   const parsedPrice = Number.parseInt(price, 10);
-  const ready = Boolean(findingId && panelistId && objectiveId && price.trim());
+  const ready = Boolean(findingId && panelistId && price.trim());
 
   const validation = useMemo(() => {
     if (!ready) return null;
-    return validateAward(state, {
-      findingId,
-      panelistId,
-      objectiveId,
-      price: parsedPrice,
-    });
-  }, [ready, state, findingId, panelistId, objectiveId, parsedPrice]);
+    return validateAward(state, { findingId, panelistId, price: parsedPrice });
+  }, [ready, state, findingId, panelistId, parsedPrice]);
 
   function reset() {
     setFindingId("");
@@ -91,10 +84,9 @@ export function AwardPanel({ state }: { state: EventState }) {
     const result = await awardFinding({
       findingId,
       panelistId,
-      objectiveId,
       price: parsedPrice,
       acknowledgeWarnings: true,
-      advanceRound,
+      advanceWhenRoundComplete: advance,
     });
 
     setBusy(false);
@@ -112,31 +104,41 @@ export function AwardPanel({ state }: { state: EventState }) {
     setTimeout(() => setFlash(null), 4000);
   }
 
+  // Everyone who has not yet picked in the round on screen. Shown so the
+  // operator can see at a glance who the moderator is still waiting on.
+  const target = roundIndex + 1;
+  const outstanding =
+    roundIndex < 0 ? [] : panelists.filter((view) => view.filledCount < target);
+
   return (
     <section className="space-y-4">
       {/* Round header */}
-      <div className="panel flex items-center justify-between gap-4 p-4">
+      <div className="panel flex flex-wrap items-center justify-between gap-4 p-4">
         <div className="min-w-0">
           <p className="eyebrow text-signal">
-            {round
-              ? `Round ${state.event.currentRoundIndex + 1} of ${objectives.length}`
-              : state.event.currentRoundIndex < 0
-                ? "Auction not started"
-                : "All rounds complete"}
+            {roundIndex < 0
+              ? "Auction not started"
+              : roundIndex >= rounds
+                ? "All rounds complete"
+                : `Round ${roundIndex + 1} of ${rounds}`}
           </p>
-          <h2 className="text-paper mt-1 truncate text-xl font-semibold">
-            {round?.name ?? "—"}
+          <h2 className="text-paper mt-1 text-xl font-semibold">
+            {roundIndex < 0
+              ? "Standing by"
+              : outstanding.length === 0
+                ? "Every panelist has picked"
+                : `Waiting on ${outstanding.map((v) => v.panelist.name).join(", ")}`}
           </h2>
-          {round?.prompt ? (
-            <p className="text-paper-mute mt-1 line-clamp-2 text-sm">{round.prompt}</p>
-          ) : null}
+          <p className="text-paper-mute mt-1 text-sm">
+            Any panelist may take any finding. Each award fills their next open pick.
+          </p>
         </div>
         <div className="flex shrink-0 gap-2">
           <button
             type="button"
             className="btn btn-ghost"
             onClick={() => void setRound(state, "prev")}
-            disabled={state.event.currentRoundIndex < 0}
+            disabled={roundIndex < 0}
           >
             ← Prev
           </button>
@@ -144,7 +146,7 @@ export function AwardPanel({ state }: { state: EventState }) {
             type="button"
             className="btn btn-ghost"
             onClick={() => void setRound(state, "next")}
-            disabled={state.event.currentRoundIndex >= objectives.length - 1}
+            disabled={roundIndex >= rounds - 1}
           >
             Next →
           </button>
@@ -215,34 +217,11 @@ export function AwardPanel({ state }: { state: EventState }) {
         {/* Transaction form */}
         <div className="panel flex flex-col gap-4 p-4">
           <div>
-            <label className="label" htmlFor="award-objective">
-              Objective
-            </label>
-            <select
-              id="award-objective"
-              className="field"
-              value={objectiveId}
-              onChange={(event) => {
-                setObjectiveId(event.target.value);
-                setConfirming(false);
-              }}
-            >
-              {objectives.map((objective, index) => (
-                <option key={objective.id} value={objective.id}>
-                  {index + 1}. {objective.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
             <span className="label">Winning panelist</span>
             <div className="space-y-1.5">
               {panelists.map((view) => {
                 const active = view.panelist.id === panelistId;
-                const filledThis = view.slots.find(
-                  (slot) => slot.objective.id === objectiveId,
-                )?.transaction;
+                const full = view.filledCount >= rounds;
 
                 return (
                   <button
@@ -252,22 +231,23 @@ export function AwardPanel({ state }: { state: EventState }) {
                       setPanelistId(active ? "" : view.panelist.id);
                       setConfirming(false);
                     }}
-                    disabled={Boolean(filledThis)}
+                    disabled={full}
                     className={cx(
                       "flex w-full items-center justify-between gap-2 rounded-sm border px-3 py-2 text-left transition-colors",
                       active
                         ? "border-signal bg-signal/[0.08]"
                         : "border-ink-500 hover:border-paper-faint",
-                      filledThis && "cursor-not-allowed opacity-40",
+                      full && "cursor-not-allowed opacity-40",
                     )}
-                    title={
-                      filledThis
-                        ? `${view.panelist.name} has already filled this objective.`
-                        : undefined
-                    }
+                    title={full ? `${view.panelist.name}'s team is full.` : undefined}
                   >
-                    <span className="text-paper min-w-0 truncate text-sm font-medium">
-                      {view.panelist.name}
+                    <span className="min-w-0">
+                      <span className="text-paper block truncate text-sm font-medium">
+                        {view.panelist.name}
+                      </span>
+                      <span className="text-paper-faint tabular font-mono text-[0.625rem] tracking-[0.1em] uppercase">
+                        {view.panelist.role || "no role"} · {view.filledCount}/{rounds}
+                      </span>
                     </span>
                     <span className="tabular text-signal shrink-0 font-mono text-sm font-bold">
                       {view.remaining}
@@ -322,14 +302,20 @@ export function AwardPanel({ state }: { state: EventState }) {
             </Notice>
           ) : null}
 
-          <label className="text-paper-mute flex items-center gap-2 text-xs">
+          <label className="text-paper-mute flex items-start gap-2 text-xs">
             <input
               type="checkbox"
-              checked={advanceRound}
-              onChange={(event) => setAdvanceRound(event.target.checked)}
-              className="accent-signal"
+              checked={advance}
+              onChange={(event) => setAdvance(event.target.checked)}
+              className="accent-signal mt-0.5"
             />
-            Advance to the next round after awarding
+            <span>
+              Advance the round once every panelist has picked
+              <span className="text-paper-faint block">
+                Nobody bids in a fixed order, so the round steps on when the board says it
+                is over rather than after each award.
+              </span>
+            </span>
           </label>
 
           {confirming && validation?.ok ? (
@@ -339,9 +325,15 @@ export function AwardPanel({ state }: { state: EventState }) {
                 <strong className="text-signal">
                   “{selectedFinding?.finding.headline}”
                 </strong>{" "}
-                to <strong>{selectedPanelist?.panelist.name}</strong> for{" "}
-                <strong className="tabular">{parsedPrice} credits</strong> under{" "}
-                <strong>{selectedObjective?.name}</strong>?
+                to <strong>{selectedPanelist?.panelist.name}</strong>
+                {selectedPanelist?.panelist.role
+                  ? ` (${selectedPanelist.panelist.role})`
+                  : ""}{" "}
+                for <strong className="tabular">{parsedPrice} credits</strong> — pick{" "}
+                <strong className="tabular">
+                  {(selectedPanelist?.filledCount ?? 0) + 1} of {rounds}
+                </strong>
+                ?
               </p>
               <div className="flex gap-2">
                 <button
@@ -373,6 +365,53 @@ export function AwardPanel({ state }: { state: EventState }) {
               AWARD FINDING
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Teams so far — the operator's read on where the draft has got to. */}
+      <div className="panel p-4">
+        <h3 className="eyebrow mb-3">Teams</h3>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {panelists.map((view) => (
+            <div key={view.panelist.id} className="border-ink-500 rounded-sm border p-3">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-paper truncate text-sm font-semibold">
+                  {view.panelist.name}
+                </span>
+                <RoleChip role={view.panelist.role} />
+                <span className="tabular text-signal ml-auto font-mono text-sm font-bold">
+                  {view.remaining}
+                </span>
+              </div>
+              <ol className="space-y-1">
+                {roundNumbers(state).map((pick, index) => {
+                  const slot = view.slots[index];
+                  return (
+                    <li
+                      key={pick}
+                      data-type={slot?.finding?.type}
+                      className={cx(
+                        "type-bar flex items-baseline gap-2 py-0.5 pl-2 text-xs",
+                        !slot?.finding && "opacity-45",
+                      )}
+                    >
+                      <span className="text-paper-faint tabular w-3 shrink-0 font-mono">
+                        {pick}
+                      </span>
+                      <span className="text-paper-dim min-w-0 flex-1 truncate">
+                        {slot?.finding?.headline ?? "Open"}
+                      </span>
+                      {slot?.transaction ? (
+                        <span className="tabular text-signal shrink-0 font-mono font-semibold">
+                          {slot.transaction.price}
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ))}
         </div>
       </div>
     </section>

@@ -5,8 +5,11 @@
 A live-event web app for the NEIS session at NYC Climate Week.
 
 Five breakout groups each record five Strategic Findings **at the same time, from their own
-laptops**. Every finding lands on a shared board the moment it is submitted. A final panel then
-bids fictional investment credits to acquire one finding for each of five strategic objectives.
+laptops**. Every finding lands on a shared board the moment it is submitted. A panel of experts
+then bids fictional investment credits for them — each panelist drafting the strongest set of
+findings for the question their **role** is answering. The audience plays the same game from
+their phones, and the closing screen puts the two side by side.
+
 The bidding happens **verbally in the room** — this app captures the findings, projects the
 board, and lets an operator record each result so every screen updates instantly.
 
@@ -16,8 +19,9 @@ sync live across devices.
 | Screen | URL | PIN |
 | --- | --- | --- |
 | **Operator control room** | [`/control/`](https://lrcarey222.github.io/NEIS/control/) | `2026` |
-| **Big screen display** | [`/display/`](https://lrcarey222.github.io/NEIS/display/) — instructions, findings board, auction, portfolios | none — public |
+| **Big screen display** | [`/display/`](https://lrcarey222.github.io/NEIS/display/) — instructions, findings board, auction, portfolios, audience | none — public |
 | **Breakout workspace** | [`/breakout/manufacturing/`](https://lrcarey222.github.io/NEIS/breakout/manufacturing/) · [`auto`](https://lrcarey222.github.io/NEIS/breakout/auto/) · [`clean-firm`](https://lrcarey222.github.io/NEIS/breakout/clean-firm/) · [`grid`](https://lrcarey222.github.io/NEIS/breakout/grid/) · [`ai`](https://lrcarey222.github.io/NEIS/breakout/ai/) | `1234` |
+| **Audience play-along** | [`/play/`](https://lrcarey222.github.io/NEIS/play/) | none — public |
 | **Printable summary** | [`/summary/`](https://lrcarey222.github.io/NEIS/summary/) | none |
 | **Landing page + QR codes** | [`/`](https://lrcarey222.github.io/NEIS/) | none |
 
@@ -33,9 +37,16 @@ sync live across devices.
 **Configure the event** — `/control/` → **Setup**:
 
 - Event title and subtitle (shown across the top of the big screen)
-- The real **panelist names** and starting budget (default 100 credits)
-- The five **strategic objectives**, their moderator prompts, and the round order
+- The number of **rounds** — how many findings each panelist ends up holding (default 5)
+- The real **panelist names**, their **roles**, and the starting budget (default 100 credits)
+- Each role's **action prompt** — the question that panelist is answering, projected beside
+  their picks. Typing one of the five built-in role names fills its prompt in for you.
+- Whether to run the **audience play-along**, and the credits each person gets
 - Rename breakouts if needed, and **set a PIN per room**
+
+> **There are no strategic objectives.** A panelist may buy any finding for any reason. What
+> makes a portfolio judgeable is the role it was drafted for, which is why the prompt is on
+> screen next to every set of picks.
 
 **Create the live event** — Setup → **Event lifecycle**:
 
@@ -52,8 +63,8 @@ sync live across devices.
 ## 1a. Briefing the room
 
 The **Instructions** screen is the projected briefing: a QR code and PIN for every
-breakout, the five finding types, what submitting does, and the five objectives the panel will
-bid against. Leave it up while people find their tables and while the moderator explains the
+breakout, the five finding types, what submitting does, and the roles the panel will draft
+through. When the play-along is open it also carries the audience QR code. Leave it up while people find their tables and while the moderator explains the
 exercise — it is the fastest way to fix the room that has not found its link.
 
 It reads the live event, so renamed breakouts and edited PINs appear on it immediately, and the
@@ -62,6 +73,9 @@ QR codes carry `?event=rehearsal` through when the projector is on the rehearsal
 > **It projects the room PINs.** That is deliberate — everyone who can read the screen is in the
 > room — but `/display/` is a public URL, so anyone with the link sees them too. See
 > [Security posture](#security-posture); switch to another mode if that matters to you.
+>
+> The same applies to the play-along: `/play/` has no PIN at all, by design — a QR code a whole
+> room scans cannot also be a gate. Anyone with the link can submit a portfolio.
 
 ## 2. During the breakouts
 
@@ -83,36 +97,67 @@ Facilitators cannot reopen their own room once submitted; that is deliberately y
 
 Switch the big screen to **Live Auction**. On the **Auction** tab:
 
-1. The **objective** is pre-selected from the current round
-2. Filter and click the **finding** the room just bid on
-3. Click the winning **panelist** — each button shows their remaining credits
-4. Type the **winning bid** — validation updates as you type
-5. **AWARD FINDING** → confirm the summary sentence → done
+1. Filter and click the **finding** the room just bid on
+2. Click the winning **panelist** — each button shows their role, picks so far, and credits left
+3. Type the **winning bid** — validation updates as you type
+4. **AWARD FINDING** → confirm the summary sentence → done
 
-Every screen updates within a few hundred milliseconds. *Advance to the next round after
-awarding* is on by default; turn it off if several panelists buy within one round.
+There is no slot to choose. A team is just its picks in the order they were won, so each award
+lands in that panelist's next open position by itself.
+
+Every screen updates within a few hundred milliseconds. *Advance the round once every panelist
+has picked* is on by default: nobody bids in a fixed order, so the round steps on when the board
+says it is over rather than after each individual award.
 
 **UNDO LAST TRANSACTION** is at the top of the **Ledger** tab. Mis-hearing a bid in a loud room
 is the likeliest failure mode of the whole exercise, so undo is one click plus a confirm, and it
 fully restores the budget and returns the finding to the pool. Any earlier transaction can also
 be edited in place or deleted.
 
+## 3a. The audience play-along
+
+Open it from **Setup → Audience play-along** (or the **Audience** tab). A QR code then appears in
+the right-hand column of the **Live Auction** screen for as long as it stays open, with a live
+count of how many people have submitted.
+
+Each person scans it, enters their name, picks one of the panel's **roles**, and spends their own
+credits across the board — the same exercise, from the same brief, at the same time.
+
+The **Audience** tab is your view of it: the code to hold up if a table cannot find it, the
+counts, the room-versus-panel table in reading order, and the roster if you need to remove a
+duplicate or a test entry.
+
+> **Two writes per phone, not two hundred.** An entry reaches the database when someone joins and
+> again when they submit — not on every tap. That is what keeps 150 handsets on a conference
+> network from swamping the projector.
+
 ## 4. Closing
 
 Switch to **Final Portfolios**. This mode is **two screens**, and a *Show summary cuts →* button
 appears next to the mode buttons to flip between them:
 
-1. **The roster** — every panelist's five slots with source breakout, finding type and price,
-   plus total spent, credits remaining, and their breakout spread
+1. **The roster** — every panelist's picks with source breakout, finding type and price, plus
+   their role and its question, total spent, credits remaining, and their breakout spread
 2. **The summary cuts** — findings submitted and acquired, credits committed, average price,
    then highest-valued findings, most-represented breakouts, and what went undrafted
+
+Then switch to **Audience vs Panel** for the closing comparison: what the room paid per person
+for each finding against what the panel actually paid, the findings the room rated far above the
+panel (including ones nobody drafted), the ones the panel paid up for and the room did not, and
+the top pick under each role.
+
+> **Why the audience figure is an average over everyone.** It divides by every submitted
+> portfolio, including the people who put nothing on that finding — which is exactly what a panel
+> price is: what one participant, holding one budget, paid for one finding. Averaging over
+> backers instead would let two enthusiasts outrank the whole room.
 
 They are separate screens rather than one split view because four portfolios plus three summary
 panels cannot both stay legible from the back of a room at 16:9. No winner is declared unless
 you enable it in Setup.
 
-**Export** from the toolbar on `/control/`: **Findings CSV**, **Ledger CSV**, **Portfolios CSV**,
-and a **Printable summary** page (browser → Print → Save as PDF).
+**Export** from the toolbar on `/control/`: **Findings CSV** (carrying the audience columns too),
+**Ledger CSV**, **Portfolios CSV**, **Audience CSV**, and a **Printable summary** page
+(browser → Print → Save as PDF).
 
 ---
 
@@ -147,7 +192,8 @@ because they act on **everyone** — including a breakout room mid-sentence.
 | **Seed empty finding templates** | Gives every room its five blank cards. Skips rooms that already have findings. |
 | **Submit all breakouts** | Publishes everything currently written. Handy mid-rehearsal. |
 | **Reset the auction** | Clears all transactions, returns to Round 0, **keeps every finding**. Use this between the rehearsal auction and the real one. |
-| **Clear all findings** | Removes findings and transactions, keeps panelists, objectives and settings. |
+| **Clear the audience play-along** | Removes every entry. Run this between the rehearsal and the real session. |
+| **Clear all findings** | Removes findings and transactions, keeps panelists and settings. |
 | **New demo event** | Wipes everything and reloads the 25 sample findings. For rehearsal. |
 | **New live event** | Wipes everything and starts empty. **Use this before the real session.** |
 
@@ -201,14 +247,18 @@ rule applied.
 **Hard rules, never overridable:**
 
 - A panelist cannot spend more credits than they hold
-- A panelist cannot buy more than one finding for the same objective
+- A panelist cannot hold more findings than there are rounds
 - A finding cannot be sold twice
 - Bids must be whole numbers, at or above the minimum bid
+
+**Deliberately not a rule:** nothing constrains *which* findings a panelist may combine. All five
+from one breakout, or all five Wildcards, is a legitimate portfolio. Judging it against the
+panelist's role is the exercise, and the app must not pre-empt that.
 
 **Advisory by default:**
 
 - **Budget reserve.** Before each award the app computes the credits a panelist must keep to fill
-  their remaining slots at the minimum bid. A bid that breaks that shows a warning but is
+  their remaining picks at the minimum bid. A bid that breaks that shows a warning but is
   allowed — a moderator may legitimately let someone go all-in. Setup → *Block bids that break
   the budget reserve* promotes it to a hard rule.
 
@@ -238,8 +288,13 @@ Check the PIN in `/control/` → Setup → Breakouts. The admin PIN opens every 
 always take over from the control laptop.
 
 **A finding is wrong after it was sold.**
-Ledger tab → **Edit** on that transaction. You can change panelist, objective and price in place,
-or delete it entirely.
+Ledger tab → **Edit** on that transaction. You can change the panelist, the price and the note in
+place, or delete it entirely.
+
+**Nobody can reach the play-along.**
+Check it is **Open** on the Audience tab — a closed play-along shows a "not open yet" message
+rather than the form. The QR code is built from the projector's own URL, so if the projector is
+on `?event=rehearsal`, the code sends people into the rehearsal event too.
 
 ---
 
@@ -263,6 +318,9 @@ src/lib/localAuth.ts        PIN → role, in the browser
 src/lib/useEvent.ts         The hook every screen reads from
 tests/                      Rule tests + live end-to-end walkthrough
 ```
+
+The pages are `/control`, `/display`, `/breakout/<slug>`, `/summary`, and `/play` — the audience
+page, public and PIN-free, one entry per phone under `audience/<id>`.
 
 Three decisions carry most of the weight:
 
@@ -378,19 +436,20 @@ in `/control/` → Setup, so you can change them on the day.
 npm test
 ```
 
-11 unit tests over the rule engine: budget arithmetic, double-sale and double-slot rejection,
-minimum bid, the reserve rule in both modes, undo restoring state exactly, editing a transaction
-excluding itself from its own checks, and a full four-panelist five-round auction reconciling to
-correct totals. Pure — no network.
+26 unit tests over the rule engine and the audience arithmetic: budget maths, double-sale and
+full-team rejection, minimum bid, the reserve rule in both modes, undo restoring state exactly,
+editing a transaction excluding itself from its own checks, a full five-round draft reconciling
+to correct totals, the role roster, audience averages dividing by everyone rather than by
+backers, the room-versus-panel gap, and a schema 1 event still loading. Pure — no network.
 
 ```bash
 node --import ./tests/ts-resolver.mjs tests/e2e.mjs https://neis-climate-week-default-rtdb.firebaseio.com
 ```
 
-42 checks against live Firebase: event round-trip, keyed-not-array storage, seeding all five
-rooms, **five rooms writing simultaneously with nothing lost**, submit and reopen, twenty awards
-across five rounds, rule enforcement against live data, undo, and resetting the auction while
-keeping findings.
+Checks against live Firebase: event round-trip, keyed-not-array storage, seeding all five rooms,
+**five rooms writing simultaneously with nothing lost**, submit and reopen, twenty awards across
+five rounds, rule enforcement against live data, undo, **forty phones submitting a play-along
+portfolio at once with nothing lost**, and resetting the auction while keeping findings.
 
 It works under `neis/events/__e2e` and deletes that node when it finishes, so it is safe to run
 against the event database — but run it *before* the session, not during.
@@ -418,7 +477,7 @@ segment so a `".write": "auth.uid === $uid"` rule can be added without touching 
 - The connection indicator on every screen reads **Live** on Firebase, **Local only** in red when
   this browser is not syncing, and **No event** before one is created.
 - `/display/` shortcuts: **1** Findings Board, **2** Live Auction, **3** Final Portfolios,
-  **4** Instructions, **F** fullscreen. These are a local override in case the operator's machine drops off the
+  **4** Audience vs Panel, **5** Instructions, **F** fullscreen. These are a local override in case the operator's machine drops off the
   network; the badge in the header says so, and the next change from `/control/` takes back over.
 - Colour is never the only signal. Every finding type shows its glyph and full name, and
   confidence shows both bars and text.

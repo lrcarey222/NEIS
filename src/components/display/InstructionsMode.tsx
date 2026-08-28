@@ -1,64 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
+import { useMemo } from "react";
 
+import { QrCode } from "@/components/QrCode";
 import { cx } from "@/components/primitives";
-import { sortedBreakouts, sortedObjectives } from "@/lib/derive";
+import { panelRoles, roundCount, sortedBreakouts } from "@/lib/derive";
+import { useSiteUrl } from "@/lib/useSiteUrl";
 import { FINDING_TYPES, FINDING_TYPE_META } from "@/lib/types";
 import type { EventState } from "@/lib/types";
 
 /**
- * Mode 4 — the briefing screen.
+ * Mode 5 — the briefing screen.
  *
  * This is what is on the projector while the room is being seated and while
  * the moderator explains the exercise: how to get into your breakout, what the
  * five findings are, and what happens to them afterwards. It carries the room
  * PINs, because the failure mode this screen exists to prevent is a table that
  * never finds its link.
- *
- * QR codes are generated in the browser, like the landing page — there is no
- * server in a static export, and it keeps the screen working on a conference
- * network that only survived the page load.
  */
 export function InstructionsMode({ state }: { state: EventState }) {
   const breakouts = useMemo(() => sortedBreakouts(state), [state]);
-  const objectives = useMemo(() => sortedObjectives(state), [state]);
-  const [codes, setCodes] = useState<Record<string, string>>({});
-  const [host, setHost] = useState("");
-
-  const slugs = breakouts.map((b) => b.slug).join(",");
-
-  useEffect(() => {
-    // /display/ hangs off the same base path as /breakout/, so drop this page's
-    // own segment rather than assuming the site is served from the domain root.
-    const base = `${window.location.origin}${window.location.pathname}`
-      .replace(/\/display\/?$/, "")
-      .replace(/\/$/, "");
-    // Carry the event slot through, so a rehearsal projector sends the rooms
-    // into the rehearsal event rather than the live one.
-    const slot = new URLSearchParams(window.location.search).get("event");
-    const query = slot ? `?event=${encodeURIComponent(slot)}` : "";
-
-    setHost(base.replace(/^https?:\/\//, ""));
-
-    let cancelled = false;
-    void (async () => {
-      const next: Record<string, string> = {};
-      for (const slug of slugs.split(",").filter(Boolean)) {
-        next[slug] = await QRCode.toString(`${base}/breakout/${slug}/${query}`, {
-          type: "svg",
-          margin: 0,
-          color: { dark: "#05080c", light: "#f4f6f8" },
-        });
-      }
-      if (!cancelled) setCodes(next);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slugs]);
+  const roles = useMemo(() => panelRoles(state), [state]);
+  const rounds = roundCount(state);
+  const site = useSiteUrl();
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
@@ -98,17 +62,16 @@ export function InstructionsMode({ state }: { state: EventState }) {
                   row has left, so the code stays square and stays the largest
                   thing on the card — it has to be scannable from a seat away. */}
               <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                <div
-                  className="aspect-square w-full max-w-[14em] bg-[#f4f6f8] p-[0.35em] [&>svg]:h-full [&>svg]:w-full"
-                  dangerouslySetInnerHTML={{ __html: codes[breakout.slug] ?? "" }}
-                  aria-hidden="true"
+                <QrCode
+                  url={site.link(`breakout/${breakout.slug}`)}
+                  className="w-full max-w-[14em] p-[0.35em]"
                 />
               </div>
               <h3 className="text-paper mt-[0.6em] text-center text-[0.875em] leading-tight font-semibold text-balance">
                 {breakout.name}
               </h3>
               <p className="text-paper-faint mt-[0.35em] text-center font-mono text-[0.5625em] leading-snug break-all">
-                {host}/breakout/{breakout.slug}/
+                {site.display}/breakout/{breakout.slug}/
               </p>
               <p className="mt-[0.5em] font-mono text-[0.6875em] tracking-[0.12em] uppercase">
                 <span className="text-paper-faint">PIN </span>
@@ -166,32 +129,46 @@ export function InstructionsMode({ state }: { state: EventState }) {
         </section>
 
         <section className="panel p-[0.75em]">
-          <StepHeading number={4} title="Then: the auction" compact />
+          <StepHeading number={4} title="Then: the draft" compact />
           <p className="text-paper-mute mt-[0.5em] text-[0.75em] leading-snug">
             The panel bids{" "}
             <span className="text-paper-dim font-semibold">
               {state.event.startingBudget} credits
             </span>{" "}
-            each, buying one finding for every objective:
+            each over {rounds} rounds. Any finding, for any reason — each panelist is
+            building the strongest set for one question:
           </p>
-          {objectives.length ? (
-            <ol className="mt-[0.4em] space-y-[0.2em]">
-              {objectives.map((objective, index) => (
-                <li key={objective.id} className="flex items-baseline gap-[0.5em]">
-                  <span className="text-paper-faint tabular w-[1.2em] shrink-0 font-mono text-[0.625em]">
-                    {index + 1}
+          {roles.length ? (
+            <ul className="mt-[0.4em] space-y-[0.25em]">
+              {roles.map((role) => (
+                <li key={role.name} className="flex items-baseline gap-[0.5em]">
+                  <span className="text-signal w-[7em] shrink-0 font-mono text-[0.625em] font-semibold tracking-[0.08em] uppercase">
+                    {role.name}
                   </span>
-                  <span className="text-paper text-[0.75em] leading-snug font-medium">
-                    {objective.name}
+                  <span className="text-paper-mute line-clamp-2 text-[0.6875em] leading-snug italic">
+                    {role.prompt || "—"}
                   </span>
                 </li>
               ))}
-            </ol>
+            </ul>
           ) : (
             <p className="text-paper-faint mt-[0.4em] text-[0.75em]">
-              Objectives are set on the control screen.
+              Panelist roles are set on the control screen.
             </p>
           )}
+
+          {/* The play-along is announced here rather than sprung on the room
+              mid-auction, so people know to keep their phones out. */}
+          {state.event.audienceOpen ? (
+            <div className="border-ink-500 mt-[0.6em] flex items-center gap-[0.6em] border-t pt-[0.6em]">
+              <QrCode url={site.link("play")} className="w-[4em] shrink-0 p-[0.2em]" />
+              <p className="text-paper-mute text-[0.6875em] leading-snug">
+                <span className="text-signal font-semibold">You play too.</span> Scan this
+                during the draft to spend your own {state.event.audienceBudget} credits. We
+                compare the room against the panel at the end.
+              </p>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

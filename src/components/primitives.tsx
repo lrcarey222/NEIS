@@ -46,6 +46,34 @@ export function TypeChip({
   );
 }
 
+/**
+ * The lens a panelist — or an audience member — is drafting through.
+ *
+ * Deliberately not colour-coded by role: the five type colours already carry
+ * meaning on every screen, and a second colour system competing with them
+ * would make the board harder to read, not easier.
+ */
+export function RoleChip({
+  role,
+  size = "sm",
+}: {
+  role: string;
+  size?: "sm" | "md";
+}) {
+  if (!role.trim()) return null;
+
+  return (
+    <span
+      className={cx(
+        "border-signal/45 text-signal inline-flex items-center rounded-sm border font-mono font-semibold tracking-[0.1em] uppercase whitespace-nowrap",
+        size === "md" ? "px-2 py-0.5 text-[0.6875em]" : "px-1.5 py-0.5 text-[0.5625em]",
+      )}
+    >
+      {role}
+    </span>
+  );
+}
+
 /** Compact bar-graph confidence indicator plus its text label. */
 export function ConfidenceTag({ level }: { level: Confidence }) {
   const meta = CONFIDENCE_META[level];

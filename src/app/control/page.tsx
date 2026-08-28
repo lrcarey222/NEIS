@@ -6,22 +6,30 @@ import { Logo } from "@/components/Logo";
 import { PinGate } from "@/components/PinGate";
 import { Notice, StatusDot, cx } from "@/components/primitives";
 import { CountdownDisplay } from "@/components/Timer";
+import { AudiencePanel } from "@/components/control/AudiencePanel";
 import { AwardPanel } from "@/components/control/AwardPanel";
 import { BreakoutsPanel } from "@/components/control/BreakoutsPanel";
 import { LedgerPanel } from "@/components/control/LedgerPanel";
 import { SetupPanel } from "@/components/control/SetupPanel";
 import { patchEvent, patchTimer } from "@/lib/actions";
-import { findingsCsv, downloadCsv, portfoliosCsv, transactionsCsv } from "@/lib/csv";
+import {
+  audienceCsv,
+  downloadCsv,
+  findingsCsv,
+  portfoliosCsv,
+  transactionsCsv,
+} from "@/lib/csv";
 import { isAdmin, useRole } from "@/lib/localAuth";
 import { useEvent } from "@/lib/useEvent";
 import type { DisplayMode, EventState } from "@/lib/types";
 
-type Tab = "auction" | "ledger" | "breakouts" | "setup";
+type Tab = "auction" | "ledger" | "breakouts" | "audience" | "setup";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "auction", label: "Auction" },
   { key: "ledger", label: "Ledger" },
   { key: "breakouts", label: "Breakouts" },
+  { key: "audience", label: "Audience" },
   { key: "setup", label: "Setup" },
 ];
 
@@ -133,6 +141,11 @@ export default function ControlPage() {
                 {state.transactions.length}
               </span>
             ) : null}
+            {entry.key === "audience" && state.audience.length > 0 ? (
+              <span className="text-paper-faint tabular ml-1.5 font-mono text-xs">
+                {state.audience.length}
+              </span>
+            ) : null}
           </button>
         ))}
 
@@ -158,6 +171,15 @@ export default function ControlPage() {
           >
             Portfolios CSV
           </button>
+          {state.audience.length > 0 ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => downloadCsv("neis-audience.csv", audienceCsv(state))}
+            >
+              Audience CSV
+            </button>
+          ) : null}
           <a className="btn btn-ghost" href="../summary/" target="_blank" rel="noreferrer">
             Printable summary ↗
           </a>
@@ -167,6 +189,7 @@ export default function ControlPage() {
       {tab === "auction" ? <AwardPanel state={state} /> : null}
       {tab === "ledger" ? <LedgerPanel state={state} /> : null}
       {tab === "breakouts" ? <BreakoutsPanel state={state} /> : null}
+      {tab === "audience" ? <AudiencePanel state={state} /> : null}
       {tab === "setup" ? <SetupPanel state={state} /> : null}
     </main>
   );
@@ -253,6 +276,7 @@ function DisplayControls({ state }: { state: EventState }) {
     { key: "board", label: "Findings Board" },
     { key: "auction", label: "Live Auction" },
     { key: "portfolios", label: "Final Portfolios" },
+    { key: "audience", label: "Audience vs Panel" },
   ];
 
   return (

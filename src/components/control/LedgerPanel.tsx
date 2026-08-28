@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { Notice, cx } from "@/components/primitives";
-import { byId, sortedObjectives, sortedPanelists } from "@/lib/derive";
+import { Notice } from "@/components/primitives";
+import { byId, sortedPanelists } from "@/lib/derive";
 import { patchTransaction, undoTransaction } from "@/lib/actions";
 import type { EventState, Transaction } from "@/lib/types";
 
@@ -18,7 +18,6 @@ import type { EventState, Transaction } from "@/lib/types";
 export function LedgerPanel({ state }: { state: EventState }) {
   const findings = byId(state.findings);
   const panelists = byId(state.panelists);
-  const objectives = byId(state.objectives);
   const breakouts = byId(state.breakouts);
 
   const ordered = useMemo(
@@ -129,7 +128,7 @@ export function LedgerPanel({ state }: { state: EventState }) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <p className="text-paper-faint font-mono text-[0.625rem] tracking-[0.1em] uppercase">
-                        {objectives.get(transaction.objectiveId)?.name ?? "—"}
+                        {panelists.get(transaction.panelistId)?.role || "no role"}
                         {" · "}
                         {finding ? breakouts.get(finding.breakoutId)?.shortName : "—"}
                       </p>
@@ -182,7 +181,6 @@ function EditTransaction({
   onDone: () => void;
 }) {
   const [panelistId, setPanelistId] = useState(transaction.panelistId);
-  const [objectiveId, setObjectiveId] = useState(transaction.objectiveId);
   const [price, setPrice] = useState(String(transaction.price));
   const [note, setNote] = useState(transaction.note);
   const [error, setError] = useState<string | null>(null);
@@ -192,7 +190,7 @@ function EditTransaction({
     setBusy(true);
     const result = await patchTransaction(
       transaction.id,
-      { panelistId, objectiveId, price: Number.parseInt(price, 10), note },
+      { panelistId, price: Number.parseInt(price, 10), note },
       true,
     );
     setBusy(false);
@@ -210,7 +208,7 @@ function EditTransaction({
 
   return (
     <div className="border-ink-500 mt-3 space-y-3 rounded-sm border p-3">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="label">Panelist</label>
           <select
@@ -221,20 +219,7 @@ function EditTransaction({
             {sortedPanelists(state).map((panelist) => (
               <option key={panelist.id} value={panelist.id}>
                 {panelist.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Objective</label>
-          <select
-            className="field"
-            value={objectiveId}
-            onChange={(event) => setObjectiveId(event.target.value)}
-          >
-            {sortedObjectives(state).map((objective) => (
-              <option key={objective.id} value={objective.id}>
-                {objective.name}
+                {panelist.role ? ` — ${panelist.role}` : ""}
               </option>
             ))}
           </select>
