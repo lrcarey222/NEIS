@@ -2,28 +2,29 @@
 
 import type { ReactNode } from "react";
 
-import type { Category } from "@/lib/derive";
-import { CONFIDENCE_META, type Confidence } from "@/lib/types";
+import {
+  CONFIDENCE_META,
+  FINDING_TYPE_META,
+  type Confidence,
+  type FindingType,
+} from "@/lib/types";
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
 }
 
 /**
- * Category badge — a finding type, or a strategic objective, depending on how
- * the breakouts are framed. The glyph and the word are always rendered; colour
- * is the third signal, never the only one.
+ * Finding-type badge. The glyph and the word are always rendered — colour is
+ * the third signal, never the only one.
  */
-export function CategoryChip({
-  category,
+export function TypeChip({
+  type,
   size = "sm",
-  full = false,
 }: {
-  category: Category;
+  type: FindingType;
   size?: "sm" | "md" | "lg";
-  /** Use the long label. Objective names are long, so chips default to short. */
-  full?: boolean;
 }) {
+  const meta = FINDING_TYPE_META[type];
   const sizing =
     size === "lg"
       ? "text-[0.8125em] px-2.5 py-1"
@@ -33,15 +34,42 @@ export function CategoryChip({
 
   return (
     <span
-      data-accent={category.accent}
-      title={full ? undefined : category.label}
+      data-type={type}
       className={cx(
         "type-chip inline-flex items-center gap-1.5 rounded-sm font-mono font-semibold uppercase tracking-[0.1em] whitespace-nowrap",
         sizing,
       )}
     >
-      <span aria-hidden="true">{category.glyph}</span>
-      {full ? category.label : category.shortName}
+      <span aria-hidden="true">{meta.glyph}</span>
+      {meta.label}
+    </span>
+  );
+}
+
+/**
+ * The lens a panelist — or an audience member — is drafting through.
+ *
+ * Deliberately not colour-coded by role: the five type colours already carry
+ * meaning on every screen, and a second colour system competing with them
+ * would make the board harder to read, not easier.
+ */
+export function RoleChip({
+  role,
+  size = "sm",
+}: {
+  role: string;
+  size?: "sm" | "md";
+}) {
+  if (!role.trim()) return null;
+
+  return (
+    <span
+      className={cx(
+        "border-signal/45 text-signal inline-flex items-center rounded-sm border font-mono font-semibold tracking-[0.1em] uppercase whitespace-nowrap",
+        size === "md" ? "px-2 py-0.5 text-[0.6875em]" : "px-1.5 py-0.5 text-[0.5625em]",
+      )}
+    >
+      {role}
     </span>
   );
 }

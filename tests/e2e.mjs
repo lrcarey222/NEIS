@@ -4,18 +4,20 @@
 //
 // Drives the REST API with exactly the same paths and payloads the browser
 // client writes, so it exercises the real data model rather than a mock. It
-// covers the two things the Firebase move had to get right:
+// covers the three concurrency guarantees the app actually depends on:
 //
 //   * five breakout rooms typing at the same time never overwrite each other,
 //     because every commit is a field-level write;
 //   * the auction still cannot double-sell a finding, even when two operators
-//     award the same one simultaneously.
+//     award the same one simultaneously;
+//   * forty phones submitting a play-along portfolio at once all land, because
+//     each one owns its own node under `audience`.
 //
 // It writes under <root>/events/__e2e and deletes that node when finished.
 
 import assert from "node:assert/strict";
 
-import { auctionSlots, blankCardPlan, validateAward } from "../src/lib/derive.ts";
+import { buildAudienceSummary, entrySpend, validateAward } from "../src/lib/derive.ts";
 import { createBlankFindings, createEvent } from "../src/lib/seed.ts";
 import { fromSnapshot, toSnapshot } from "../src/lib/serialize.ts";
 
@@ -88,15 +90,14 @@ try {
     const state = await readState();
     check("event round-trips through the database", state !== null);
     check("5 breakouts", state.breakouts.length === 5, `got ${state.breakouts.length}`);
-    check("5 objectives", state.objectives.length === 5);
+    check("5 rounds", state.event.roundCount === 5, `got ${state.event.roundCount}`);
     check("4 panelists at 100 credits", state.panelists.every((p) => p.startingBudget === 100));
-    check("no findings yet", state.findings.length === 0);
     check(
-      "the session format round-trips",
-      state.event.breakoutFraming === "findings" &&
-        state.event.auctionFraming === "objectives",
-      `${state.event.breakoutFraming} / ${state.event.auctionFraming}`,
+      "every panelist carries a role and its question",
+      state.panelists.every((p) => p.role && p.rolePrompt),
     );
+    check("no findings yet", state.findings.length === 0);
+    check("no audience yet", state.audience.length === 0);
     check(
       "collections are stored keyed by id, not as arrays",
       !Array.isArray((await get("/breakouts")) ?? {}),
@@ -220,10 +221,9 @@ try {
     check("25 findings on the board", after.findings.filter((f) => f.submitted).length === 25);
   }
 
-  step("6. Run the auction — five objectives, four panelists");
+  step("6. Run the draft — five rounds, four panelists, free picks");
   {
     let state = await readState();
-    const objectives = [...state.objectives].sort((a, b) => a.roundOrder - b.roundOrder);
     const panelists = [...state.panelists].sort((a, b) => a.sortOrder - b.sortOrder);
     const prices = [
       [18, 20, 14, 9, 11],
@@ -236,7 +236,7 @@ try {
     let cursor = 0;
     let rejected = 0;
 
-    for (const [round, objective] of objectives.entries()) {
+    for (let round = 0; round < 5; round++) {
       for (const [seat, panelist] of panelists.entries()) {
         const findingId = pool[cursor++];
         state = await readState();
@@ -244,7 +244,6 @@ try {
         const validation = validateAward(state, {
           findingId,
           panelistId: panelist.id,
-          slotId: objective.id,
           price: prices[seat][round],
         });
         if (!validation.ok) {
@@ -257,7 +256,6 @@ try {
           id,
           findingId,
           panelistId: panelist.id,
-          slotId: objective.id,
           price: prices[seat][round],
           timestamp: Date.now(),
           note: "",
@@ -279,11 +277,11 @@ try {
         mine.length === 5 && spent === expected[seat],
         `${mine.length} findings, spent ${spent}`,
       );
-      check(
-        `${panelist.name} filled five distinct objectives`,
-        new Set(mine.map((t) => t.slotId)).size === 5,
-      );
     });
+    check(
+      "no finding was drafted twice",
+      new Set(final.transactions.map((t) => t.findingId)).size === 20,
+    );
     check("5 findings remain undrafted", 25 - final.transactions.length === 5);
   }
 
@@ -298,23 +296,20 @@ try {
     const doubleSale = validateAward(state, {
       findingId: sold.findingId,
       panelistId: state.panelists[1].id,
-      slotId: state.objectives[1].id,
       price: 5,
     });
     check("a sold finding cannot be sold again", !doubleSale.ok);
 
-    const doubleSlot = validateAward(state, {
+    const fullTeam = validateAward(state, {
       findingId: free.id,
       panelistId: sold.panelistId,
-      slotId: sold.slotId,
       price: 1,
     });
-    check("a panelist cannot refill an objective", !doubleSlot.ok);
+    check("a panelist cannot hold more than roundCount findings", !fullTeam.ok);
 
     const broke = validateAward(state, {
       findingId: free.id,
       panelistId: state.panelists[0].id,
-      slotId: state.objectives[0].id,
       price: 9999,
     });
     check("a panelist cannot overspend", !broke.ok);
@@ -349,7 +344,91 @@ try {
     await put(`/transactions/${last.id}`, last);
   }
 
-  step("9. Reset the auction without losing findings");
+  step("9. The audience plays along from forty phones at once");
+  {
+    await patch("/event", { audienceOpen: true, audienceBudget: 100 });
+
+    const before = await readState();
+    const board = before.findings.filter((f) => f.submitted).map((f) => f.id);
+    const roles = [...new Set(before.panelists.map((p) => p.role))].filter(Boolean);
+
+    // Every handset writes its own node, all at the same moment. This is the
+    // audience equivalent of the five-rooms concurrency check above: nobody
+    // shares a node, so nothing may be lost.
+    const writes = [];
+    const PLAYERS = 40;
+    for (let i = 0; i < PLAYERS; i++) {
+      const id = `au-${i}`;
+      // A spread of portfolios: some concentrated, some diversified.
+      const picks = {};
+      const width = (i % 4) + 1;
+      for (let n = 0; n < width; n++) {
+        picks[board[(i * 3 + n) % board.length]] = Math.floor(100 / width);
+      }
+      writes.push(
+        put(`/audience/${id}`, {
+          id,
+          name: `Player ${i}`,
+          affiliation: "",
+          role: roles[i % roles.length] ?? "",
+          allocations: picks,
+          // Every fifth person wanders off without submitting.
+          submitted: i % 5 !== 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }),
+      );
+    }
+    await Promise.all(writes);
+
+    const after = await readState();
+    check(
+      `all ${PLAYERS} entries landed`,
+      after.audience.length === PLAYERS,
+      `got ${after.audience.length}`,
+    );
+    check(
+      "no entry lost its allocations to a concurrent write",
+      after.audience.every((entry) => Object.keys(entry.allocations).length > 0),
+    );
+
+    const summary = buildAudienceSummary(after);
+    const expectedSubmitted = after.audience.filter((e) => e.submitted).length;
+    check(
+      `${expectedSubmitted} submitted entries counted, ${PLAYERS - expectedSubmitted} drafts ignored`,
+      summary.submitted === expectedSubmitted && summary.joined === PLAYERS,
+      `${summary.submitted} of ${summary.joined}`,
+    );
+    check(
+      "credits allocated match the submitted entries",
+      summary.creditsAllocated ===
+        after.audience
+          .filter((e) => e.submitted)
+          .reduce((sum, e) => sum + entrySpend(e), 0),
+    );
+    check(
+      "every average divides by the submitted entries, not by backers",
+      summary.stats.every(
+        (stat) => Math.abs(stat.average - stat.total / summary.submitted) < 1e-9,
+      ),
+    );
+    check(
+      "panel prices are attached to the audience rows",
+      summary.stats.some((stat) => stat.panelPrice !== null),
+    );
+    check("the room split across roles", summary.byRole.length === roles.length);
+
+    // Clearing the play-along must not touch the auction.
+    await del("/audience");
+    const cleared = await readState();
+    check("clearing the audience leaves no entries", cleared.audience.length === 0);
+    check(
+      "clearing the audience leaves the ledger intact",
+      cleared.transactions.length === after.transactions.length,
+    );
+  }
+
+  step("10. Reset the auction without losing findings");
   {
     await del("/transactions");
     await patch("/event", { currentRoundIndex: -1, displayMode: "board", status: "breakouts" });
@@ -358,84 +437,6 @@ try {
     check("transactions cleared", state.transactions.length === 0);
     check("all 25 findings survive", state.findings.filter((f) => f.submitted).length === 25);
     check("round returns to standby", state.event.currentRoundIndex === -1);
-  }
-
-  step("10. Switch the session format to objectives and re-seed");
-  {
-    // What /control does: change the framing, then Rebuild breakout cards.
-    await patch("/event", { breakoutFraming: "objectives", auctionFraming: "objectives" });
-
-    let state = await readState();
-    const plan = blankCardPlan(state);
-    check("the plan is one card per objective", plan.length === state.objectives.length);
-
-    const replacement = {};
-    for (const breakout of state.breakouts) {
-      for (const finding of createBlankFindings(breakout.id, plan)) {
-        replacement[finding.id] = finding;
-      }
-    }
-    await put("/findings", replacement);
-
-    state = await readState();
-    check("25 objective cards exist", state.findings.length === 25, `got ${state.findings.length}`);
-    for (const breakout of state.breakouts) {
-      const mine = state.findings.filter((f) => f.breakoutId === breakout.id);
-      check(
-        `${breakout.slug} covers every objective exactly once`,
-        new Set(mine.map((f) => f.objectiveId)).size === state.objectives.length,
-      );
-    }
-
-    // The rooms now write risks and opportunities instead of what-changed and
-    // evidence, and both still commit one field at a time.
-    const first = state.findings[0];
-    await Promise.all([
-      put(`/findings/${first.id}/risks`, "• Permitting timelines slip"),
-      put(`/findings/${first.id}/opportunities`, "• Reuse of existing rights of way"),
-      put(`/findings/${first.id}/headline`, "The objective is reachable but not on this schedule."),
-    ]);
-
-    state = await readState();
-    const written = state.findings.find((f) => f.id === first.id);
-    check(
-      "risks and opportunities both landed",
-      Boolean(written.risks && written.opportunities && written.headline),
-    );
-
-    check(
-      "the auction slots are the objectives",
-      auctionSlots(state).length === state.objectives.length,
-    );
-  }
-
-  step("11. Switch the auction to finding types");
-  {
-    await patch("/event", { auctionFraming: "findings", currentRoundIndex: -1 });
-    const state = await readState();
-    check(
-      "the slots become the five finding types",
-      auctionSlots(state)
-        .map((s) => s.id)
-        .join(",") === "momentum,fragility,bottleneck,opportunity,wildcard",
-    );
-
-    // The rule engine does not care which kind of slot it is handed.
-    const finding = state.findings.find((f) => f.type === "momentum");
-    await patch(`/findings/${finding.id}`, { submitted: true });
-
-    const live = await readState();
-    const validation = validateAward(live, {
-      findingId: finding.id,
-      panelistId: live.panelists[0].id,
-      slotId: "momentum",
-      price: 10,
-    });
-    check(
-      "a finding-type slot validates like an objective slot",
-      validation.ok,
-      validation.errors.map((e) => e.message).join("; "),
-    );
   }
 } catch (error) {
   failed++;

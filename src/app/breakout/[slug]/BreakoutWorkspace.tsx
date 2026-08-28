@@ -14,15 +14,7 @@ import {
   reorderFindings,
   type FindingPatch,
 } from "@/lib/actions";
-import {
-  buildFindingView,
-  findingCategory,
-  findingsForBreakout,
-  lexicon,
-  sortedObjectives,
-  type Category,
-  type FindingView,
-} from "@/lib/derive";
+import { buildFindingView, findingsForBreakout, type FindingView } from "@/lib/derive";
 import { canEditBreakout, useRole } from "@/lib/localAuth";
 import { useEvent } from "@/lib/useEvent";
 import {
@@ -32,20 +24,15 @@ import {
   type Confidence,
   type Finding,
   type FindingType,
-  type Objective,
 } from "@/lib/types";
 
 /**
- * The breakout facilitator's workspace — one room, one card per category.
+ * The breakout facilitator's workspace — one room, five findings.
  *
  * Optimised for a laptop on a round table with six people talking: every field
  * saves on blur, there is no "save" button to forget, and each keystroke-commit
  * writes only that one field so two rooms (or two people in a room) editing at
  * the same time never overwrite each other.
- *
- * What a card *is* comes from the session format set in /control: five findings
- * typed Momentum…Wildcard, or one risks-and-opportunities assessment per
- * strategic objective.
  */
 export function BreakoutWorkspace({ slug }: { slug: string }) {
   const { state, status, mode } = useEvent(`breakout:${slug}`);
@@ -125,13 +112,6 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
     );
   }
 
-  const words = lexicon(state);
-  const byObjective = state.event.breakoutFraming === "objectives";
-  const objectives = sortedObjectives(state);
-  // Only relevant when the panel's team is built from finding types: the type
-  // then has to be right even though it is not what categorises the card.
-  const needsType = state.event.auctionFraming === "findings";
-
   const submitted = breakout.submissionStatus === "submitted";
   const complete = findings.filter((f) => f.headline.trim().length > 0).length;
 
@@ -173,34 +153,17 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
 
         <div className="panel mt-5 p-4">
           <p className="text-paper-dim text-sm leading-relaxed">
-            {byObjective ? (
-              <>
-                Work through the{" "}
-                <strong className="text-paper">
-                  {objectives.length} Strategic Objectives
-                </strong>{" "}
-                below. For each one, record the <strong className="text-paper">risks</strong>{" "}
-                and the <strong className="text-paper">opportunities</strong> your group sees
-                from where you sit. Rank them 1–{objectives.length || 5} by how much your
-                group thinks they matter. Everything saves automatically as you type; nothing
-                reaches the main board until you submit.
-              </>
-            ) : (
-              <>
-                Record{" "}
-                <strong className="text-paper">five Strategic Findings</strong> covering
-                developments over the last 18 months — one of each type below. Rank them 1–5
-                by how much your group thinks they matter. Everything saves automatically as
-                you type; nothing reaches the main board until you submit.
-              </>
-            )}
+            Record <strong className="text-paper">five Strategic Findings</strong> covering
+            developments over the last 18 months — one of each type below. Rank them 1–5 by
+            how much your group thinks they matter. Everything saves automatically as you
+            type; nothing reaches the main board until you submit.
           </p>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <StatusPill status={breakout.submissionStatus} />
           <span className="text-paper-faint tabular font-mono text-xs tracking-[0.1em] uppercase">
-            {complete} / {findings.length || (byObjective ? objectives.length : 5)} drafted
+            {complete} / {findings.length || 5} drafted
           </span>
           <button
             type="button"
@@ -221,8 +184,8 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
       {submitted ? (
         <div className="mb-6">
           <Notice tone="success">
-            Submitted — these {words.itemPlural} are live on the main board. Ask the organiser
-            to reopen the room if you need to make a correction.
+            Submitted — these findings are live on the main board. Ask the organiser to
+            reopen the room if you need to make a correction.
           </Notice>
         </div>
       ) : null}
@@ -244,7 +207,7 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
         <div className="space-y-4">
           {findings.length === 0 ? (
             <Notice tone="info">
-              No card templates yet. Ask the organiser to seed this room from the control
+              No finding templates yet. Ask the organiser to seed this room from the control
               screen.
             </Notice>
           ) : (
@@ -252,10 +215,6 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
               <FindingEditor
                 key={finding.id}
                 finding={finding}
-                category={findingCategory(state, finding)}
-                byObjective={byObjective}
-                objectives={objectives}
-                showTypeField={!byObjective || needsType}
                 index={index}
                 total={findings.length}
                 disabled={submitted}
@@ -276,8 +235,8 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
       <footer className="border-ink-500 mt-10 flex flex-wrap items-center justify-between gap-4 border-t pt-6">
         <p className="text-paper-faint max-w-md text-xs leading-relaxed">
           {submitted
-            ? `Your ${words.itemPlural} are on the board.`
-            : `Submitting publishes all ${findings.length || 5} cards to the main screen at once.`}
+            ? "Your findings are on the board."
+            : "Submitting publishes all five findings to the main screen at once."}
         </p>
         <div className="flex gap-2">
           {submitted ? (
@@ -295,7 +254,6 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
                 Mark as drafting
               </button>
               <SubmitButton
-                label={`Submit ${words.itemPlural}`}
                 disabled={complete === 0}
                 onConfirm={() => void setStatus("submitted")}
                 incomplete={complete < findings.length}
@@ -305,11 +263,7 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
         </div>
       </footer>
 
-      <FindingDetail
-        view={detail}
-        slotLabel={words.Slot}
-        onClose={() => setDetail(null)}
-      />
+      <FindingDetail view={detail} onClose={() => setDetail(null)} />
     </main>
   );
 }
@@ -317,12 +271,10 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
 // --- Submit ----------------------------------------------------------------
 
 function SubmitButton({
-  label,
   disabled,
   incomplete,
   onConfirm,
 }: {
-  label: string;
   disabled: boolean;
   incomplete: boolean;
   onConfirm: () => void;
@@ -337,7 +289,7 @@ function SubmitButton({
         disabled={disabled}
         onClick={() => setConfirming(true)}
       >
-        {label}
+        Submit findings
       </button>
     );
   }
@@ -345,7 +297,7 @@ function SubmitButton({
   return (
     <span className="flex items-center gap-2">
       <span className="text-paper-mute text-xs">
-        {incomplete ? "Some cards are blank. Submit anyway?" : "Publish to the board?"}
+        {incomplete ? "Some findings are blank. Submit anyway?" : "Publish to the board?"}
       </span>
       <button type="button" className="btn btn-ghost" onClick={() => setConfirming(false)}>
         Cancel
@@ -380,23 +332,15 @@ function StatusPill({ status }: { status: string }) {
 // --- Editor ----------------------------------------------------------------
 
 /**
- * A single card in edit mode.
+ * A single finding card in edit mode.
  *
  * Local state mirrors the field being typed into and commits on blur. Without
  * that mirror every keystroke would round-trip and the database echo would
  * fight the cursor; with it, a teammate's edit to a different card still lands
  * live while this one is being written.
- *
- * The body swaps with the framing: what-changed and evidence for a finding,
- * risks and opportunities for an objective. Both sets are stored on the same
- * record, so switching format never destroys what a room already typed.
  */
 function FindingEditor({
   finding,
-  category,
-  byObjective,
-  objectives,
-  showTypeField,
   index,
   total,
   disabled,
@@ -404,16 +348,13 @@ function FindingEditor({
   onMove,
 }: {
   finding: Finding;
-  category: Category;
-  byObjective: boolean;
-  objectives: Objective[];
-  showTypeField: boolean;
   index: number;
   total: number;
   disabled: boolean;
   onSave: (id: string, patch: FindingPatch) => Promise<void>;
   onMove: (direction: -1 | 1) => Promise<void>;
 }) {
+  const meta = FINDING_TYPE_META[finding.type];
   const [draft, setDraft] = useState(finding);
   const [dirty, setDirty] = useState(false);
   const [expanded, setExpanded] = useState(index === 0);
@@ -432,9 +373,7 @@ function FindingEditor({
     [finding.id, onSave],
   );
 
-  function field(
-    key: "headline" | "whatChanged" | "evidence" | "risks" | "opportunities" | "whyItMatters" | "dissent",
-  ) {
+  function field(key: "headline" | "whatChanged" | "evidence" | "whyItMatters" | "dissent") {
     return {
       value: draft[key],
       onChange: (
@@ -452,7 +391,7 @@ function FindingEditor({
   }
 
   return (
-    <section data-accent={category.accent} className="type-bar panel overflow-hidden">
+    <section data-type={finding.type} className="type-bar panel overflow-hidden">
       <header className="flex items-center gap-3 p-4">
         <button
           type="button"
@@ -461,15 +400,15 @@ function FindingEditor({
           aria-expanded={expanded}
         >
           <span className="type-text shrink-0 text-lg" aria-hidden="true">
-            {category.glyph}
+            {meta.glyph}
           </span>
           <span className="min-w-0 flex-1">
             <span className="type-text block font-mono text-[0.6875rem] font-semibold tracking-[0.12em] uppercase">
-              {category.label}
+              {meta.label}
             </span>
             <span className="text-paper mt-0.5 block truncate text-sm font-medium">
               {draft.headline || (
-                <span className="text-paper-faint italic">{category.blurb}</span>
+                <span className="text-paper-faint italic">{meta.blurb}</span>
               )}
             </span>
           </span>
@@ -514,68 +453,36 @@ function FindingEditor({
             <input
               id={`headline-${finding.id}`}
               className="field text-base"
-              placeholder={category.blurb}
+              placeholder={meta.blurb}
               maxLength={200}
               {...field("headline")}
             />
           </div>
 
-          {byObjective ? (
-            <>
-              <div>
-                <label className="label" htmlFor={`risks-${finding.id}`}>
-                  Risks — what threatens this objective, one per line
-                </label>
-                <textarea
-                  id={`risks-${finding.id}`}
-                  className="field font-mono text-sm"
-                  rows={4}
-                  placeholder={"• …\n• …"}
-                  {...field("risks")}
-                />
-              </div>
+          <div>
+            <label className="label" htmlFor={`changed-${finding.id}`}>
+              What changed? — 1–3 sentences
+            </label>
+            <textarea
+              id={`changed-${finding.id}`}
+              className="field"
+              rows={3}
+              {...field("whatChanged")}
+            />
+          </div>
 
-              <div>
-                <label className="label" htmlFor={`opportunities-${finding.id}`}>
-                  Opportunities — what could accelerate it, one per line
-                </label>
-                <textarea
-                  id={`opportunities-${finding.id}`}
-                  className="field font-mono text-sm"
-                  rows={4}
-                  placeholder={"• …\n• …"}
-                  {...field("opportunities")}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="label" htmlFor={`changed-${finding.id}`}>
-                  What changed? — 1–3 sentences
-                </label>
-                <textarea
-                  id={`changed-${finding.id}`}
-                  className="field"
-                  rows={3}
-                  {...field("whatChanged")}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor={`evidence-${finding.id}`}>
-                  Evidence — one point per line
-                </label>
-                <textarea
-                  id={`evidence-${finding.id}`}
-                  className="field font-mono text-sm"
-                  rows={4}
-                  placeholder={"• …\n• …"}
-                  {...field("evidence")}
-                />
-              </div>
-            </>
-          )}
+          <div>
+            <label className="label" htmlFor={`evidence-${finding.id}`}>
+              Evidence — one point per line
+            </label>
+            <textarea
+              id={`evidence-${finding.id}`}
+              className="field font-mono text-sm"
+              rows={4}
+              placeholder={"• …\n• …"}
+              {...field("evidence")}
+            />
+          </div>
 
           <div>
             <label className="label" htmlFor={`matters-${finding.id}`}>
@@ -613,56 +520,28 @@ function FindingEditor({
               </select>
             </div>
 
-            {byObjective ? (
-              <div>
-                <label className="label" htmlFor={`objective-${finding.id}`}>
-                  Strategic objective
-                </label>
-                <select
-                  id={`objective-${finding.id}`}
-                  className="field"
-                  value={draft.objectiveId}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    const objectiveId = event.target.value;
-                    setDraft((current) => ({ ...current, objectiveId }));
-                    void commit({ objectiveId });
-                  }}
-                >
-                  <option value="">— choose an objective —</option>
-                  {objectives.map((objective) => (
-                    <option key={objective.id} value={objective.id}>
-                      {objective.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            {showTypeField ? (
-              <div>
-                <label className="label" htmlFor={`type-${finding.id}`}>
-                  Finding type
-                </label>
-                <select
-                  id={`type-${finding.id}`}
-                  className="field"
-                  value={draft.type}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    const type = event.target.value as FindingType;
-                    setDraft((current) => ({ ...current, type }));
-                    void commit({ type });
-                  }}
-                >
-                  {FINDING_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {FINDING_TYPE_META[type].label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
+            <div>
+              <label className="label" htmlFor={`type-${finding.id}`}>
+                Finding type
+              </label>
+              <select
+                id={`type-${finding.id}`}
+                className="field"
+                value={draft.type}
+                disabled={disabled}
+                onChange={(event) => {
+                  const type = event.target.value as FindingType;
+                  setDraft((current) => ({ ...current, type }));
+                  void commit({ type });
+                }}
+              >
+                {FINDING_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {FINDING_TYPE_META[type].label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <details className="group">

@@ -4,34 +4,25 @@ import { useEffect, useState } from "react";
 
 import { Notice, cx } from "@/components/primitives";
 import {
+  clearAudience,
   clearFindings,
   createNewEvent,
-  createObjective,
   createPanelist,
-  deleteObjective,
   deletePanelist,
   patchBreakout,
   patchEvent,
-  patchObjective,
   patchPanelist,
-  rebuildBreakoutCards,
-  reorderObjectives,
   resetAuction,
   seedBlankFindings,
-  setFraming,
+  setAudienceOpen,
+  setRoundCount,
   submitAllBreakouts,
   type Result,
 } from "@/lib/actions";
-import {
-  blankCardPlan,
-  lexicon,
-  sortedBreakouts,
-  sortedObjectives,
-  sortedPanelists,
-} from "@/lib/derive";
+import { roundCount, sortedBreakouts, sortedPanelists } from "@/lib/derive";
 import { adminPin } from "@/lib/localAuth";
 import { currentMode } from "@/lib/net";
-import type { EventState, Framing } from "@/lib/types";
+import { DEFAULT_ROLES, defaultPromptForRole, type EventState } from "@/lib/types";
 
 /** Pre-event configuration, plus the reset/demo tools used for rehearsal. */
 export function SetupPanel({ state }: { state: EventState }) {
@@ -44,10 +35,9 @@ export function SetupPanel({ state }: { state: EventState }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <ConnectionCard />
-      <FormatSettings state={state} notify={notify} />
       <EventSettings state={state} notify={notify} />
       <PanelistSettings state={state} notify={notify} />
-      <ObjectiveSettings state={state} notify={notify} />
+      <AudienceSettings state={state} notify={notify} />
       <BreakoutSettings state={state} notify={notify} />
       <DangerZone state={state} notify={notify} />
     </section>
@@ -111,6 +101,8 @@ function LiveField({
   type = "text",
   disabled,
   hint,
+  placeholder,
+  list,
 }: {
   label: string;
   value: string | number;
@@ -118,6 +110,9 @@ function LiveField({
   type?: string;
   disabled?: boolean;
   hint?: string;
+  placeholder?: string;
+  /** id of a <datalist>, for a typed field with suggestions. */
+  list?: string;
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
@@ -130,6 +125,8 @@ function LiveField({
         type={type}
         value={draft}
         disabled={disabled}
+        placeholder={placeholder}
+        list={list}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => {
           if (draft !== String(value)) onCommit(draft);
@@ -143,171 +140,9 @@ function LiveField({
   );
 }
 
-/**
- * The shape of the whole exercise: what the rooms write, and what the panel
- * builds. First card after Sync because everything below it — the objectives,
- * the seeded cards, the auction rounds — reads differently depending on it.
- */
-function FormatSettings({ state, notify }: { state: EventState; notify: Notify }) {
-  const { breakoutFraming, auctionFraming } = state.event;
-  const auctionLocked = state.transactions.length > 0;
-  const objectives = sortedObjectives(state);
-
-  // Cards seeded under the other framing carry the wrong roster: five typed
-  // findings where the room now needs one card per objective, or vice versa.
-  // Detected by asking whether each room's cards cover the roster this framing
-  // would seed, exactly once each.
-  const roster = blankCardPlan(state).map((entry) =>
-    breakoutFraming === "objectives" ? entry.objectiveId : entry.type,
-  );
-  const mismatched = sortedBreakouts(state).filter((breakout) => {
-    const mine = state.findings.filter((f) => f.breakoutId === breakout.id);
-    if (mine.length === 0) return false;
-    if (mine.length !== roster.length) return true;
-    const covered = new Set(
-      mine.map((f) => (breakoutFraming === "objectives" ? f.objectiveId : f.type)),
-    );
-    return roster.some((key) => !covered.has(key));
-  });
-
-  return (
-    <Card
-      title="Session format"
-      hint="Whether this session runs on Strategic Findings or Strategic Objectives. Set it before the rooms start writing."
-    >
-      <div className="grid gap-4 lg:grid-cols-2">
-        <FramingChoice
-          legend="Breakout sessions produce"
-          value={breakoutFraming}
-          options={[
-            {
-              value: "findings",
-              label: "Strategic Findings",
-              hint: "Five cards per room, one of each type — Momentum, Fragility, Bottleneck, Underappreciated Opportunity, Wildcard — with what changed and the evidence.",
-            },
-            {
-              value: "objectives",
-              label: "Strategic Objectives",
-              hint: `One card per objective (${objectives.length || "none set"}), each recording the risks and the opportunities that room sees against it.`,
-            },
-          ]}
-          onChange={(value) =>
-            void setFraming(state, { breakoutFraming: value }).then(notify)
-          }
-        />
-
-        <FramingChoice
-          legend="The panel bids to fill a team of"
-          value={auctionFraming}
-          disabled={auctionLocked}
-          disabledHint="Locked — the auction has started and every recorded award points at a slot in this format. Reset the auction to change it."
-          options={[
-            {
-              value: "objectives",
-              label: "Strategic Objectives",
-              hint: `One slot per objective (${objectives.length || "none set"}). Each round contests one objective, in the order set below.`,
-            },
-            {
-              value: "findings",
-              label: "Strategic Findings",
-              hint: "One slot per finding type. Each round contests one type, in the fixed order Momentum → Fragility → Bottleneck → Opportunity → Wildcard.",
-            },
-          ]}
-          onChange={(value) =>
-            void setFraming(state, { auctionFraming: value }).then(notify)
-          }
-        />
-      </div>
-
-      {breakoutFraming === "objectives" && objectives.length === 0 ? (
-        <div className="mt-4">
-          <Notice tone="error">
-            There are no strategic objectives yet, so there is nothing for the rooms to
-            write against. Add them below first.
-          </Notice>
-        </div>
-      ) : null}
-
-      {mismatched.length > 0 ? (
-        <div className="mt-4">
-          <Notice tone="warn">
-            {mismatched.length} breakout{mismatched.length === 1 ? "" : "s"} still hold
-            cards from a different format ({mismatched.map((b) => b.shortName).join(", ")}).
-            Use <strong>Rebuild breakout cards</strong> in Event lifecycle below.
-          </Notice>
-        </div>
-      ) : null}
-
-      <p className="text-paper-faint mt-4 text-xs leading-relaxed">
-        The two are independent. Matching them is the usual choice — rooms write by
-        objective, panelists collect a team of objectives — and when they match, the
-        operator is warned if a card is bought for a slot it does not belong to.
-      </p>
-    </Card>
-  );
-}
-
-function FramingChoice({
-  legend,
-  value,
-  options,
-  onChange,
-  disabled = false,
-  disabledHint,
-}: {
-  legend: string;
-  value: Framing;
-  options: { value: Framing; label: string; hint: string }[];
-  onChange: (value: Framing) => void;
-  disabled?: boolean;
-  disabledHint?: string;
-}) {
-  // A stable name per group, so the two radio sets do not fight each other.
-  const name = `framing-${legend.replace(/\W+/g, "-").toLowerCase()}`;
-
-  return (
-    <fieldset className="border-ink-500 rounded-sm border p-3">
-      <legend className="label mb-0 px-1">{legend}</legend>
-      <div className="space-y-2">
-        {options.map((option) => (
-          <label
-            key={option.value}
-            className={cx(
-              "flex items-start gap-3 rounded-sm border p-2.5 transition-colors",
-              value === option.value
-                ? "border-signal bg-signal/[0.07]"
-                : "border-ink-500",
-              disabled ? "cursor-not-allowed opacity-55" : "hover:border-paper-faint cursor-pointer",
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              className="accent-signal mt-1"
-              checked={value === option.value}
-              disabled={disabled}
-              onChange={() => onChange(option.value)}
-            />
-            <span className="min-w-0">
-              <span className="text-paper block text-sm font-semibold">{option.label}</span>
-              <span className="text-paper-mute block text-xs leading-relaxed">
-                {option.hint}
-              </span>
-            </span>
-          </label>
-        ))}
-      </div>
-      {disabled && disabledHint ? (
-        <p className="text-paper-faint mt-2 text-[0.6875rem] leading-relaxed">
-          {disabledHint}
-        </p>
-      ) : null}
-    </fieldset>
-  );
-}
-
 function EventSettings({ state, notify }: { state: EventState; notify: Notify }) {
   const locked = state.transactions.length > 0;
+  const rounds = roundCount(state);
 
   return (
     <Card title="Event" hint="Shown across the top of the big screen.">
@@ -346,6 +181,22 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
           hint="Used for the budget-reserve warning."
           onCommit={(value) => void patchEvent(state, { minBid: Number(value) }).then(notify)}
         />
+        <LiveField
+          label="Rounds"
+          type="number"
+          value={rounds}
+          hint={`Each panelist ends up holding ${rounds} finding${rounds === 1 ? "" : "s"}. They may pick any finding, for any reason — their role is the brief, not a rule.`}
+          onCommit={(value) => void setRoundCount(state, Number(value)).then(notify)}
+        />
+        <div className="self-end">
+          <p className="label">Panelists</p>
+          <p className="text-paper tabular text-2xl leading-none font-bold">
+            {state.panelists.length}
+          </p>
+          <p className="text-paper-faint mt-1 text-[0.6875rem]">
+            Add or remove seats below.
+          </p>
+        </div>
       </div>
 
       <div className="border-ink-500 mt-4 space-y-2 border-t pt-4">
@@ -359,7 +210,7 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
         />
         <Toggle
           label="Declare a leader on the Final Portfolios screen"
-          hint="Off by default. Ranks by slots filled, then credits held back."
+          hint="Off by default. Ranks by findings held, then credits held back."
           checked={state.event.declareWinner}
           onChange={(declareWinner) => void patchEvent(state, { declareWinner }).then(notify)}
         />
@@ -395,46 +246,111 @@ function Toggle({
   );
 }
 
+/**
+ * The panel, and the lens each seat drafts through.
+ *
+ * Role and prompt are both free text — the panel is whoever turns up — but
+ * typing a role that matches one of the defaults fills in its question, so the
+ * common case is one field and a tab.
+ */
 function PanelistSettings({ state, notify }: { state: EventState; notify: Notify }) {
+  const panelists = sortedPanelists(state);
+  const missingPrompt = panelists.filter((p) => p.role.trim() && !p.rolePrompt.trim());
+
+  /** Commits the role, and its default question when there is nothing there. */
+  async function commitRole(id: string, role: string) {
+    const panelist = state.panelists.find((p) => p.id === id);
+    const suggested = defaultPromptForRole(role);
+    const fillPrompt = suggested && !panelist?.rolePrompt.trim();
+    notify(
+      await patchPanelist(state, id, {
+        role,
+        ...(fillPrompt ? { rolePrompt: suggested } : {}),
+      }),
+    );
+  }
+
   return (
-    <Card title="Panelists" hint="Each starts with the event budget unless overridden.">
-      <ul className="space-y-3">
-        {sortedPanelists(state).map((panelist) => (
-          <li key={panelist.id} className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_7rem_auto]">
-            <LiveField
-              label="Name"
-              value={panelist.name}
-              onCommit={(name) =>
-                void patchPanelist(state, panelist.id, { name }).then(notify)
-              }
-            />
-            <LiveField
-              label="Affiliation (optional)"
-              value={panelist.affiliation}
-              onCommit={(affiliation) =>
-                void patchPanelist(state, panelist.id, { affiliation }).then(notify)
-              }
-            />
-            <LiveField
-              label="Budget"
-              type="number"
-              value={panelist.startingBudget}
-              onCommit={(value) =>
-                void patchPanelist(state, panelist.id, {
-                  startingBudget: Number(value),
-                }).then(notify)
-              }
-            />
-            <button
-              type="button"
-              className="btn btn-ghost mb-0.5"
-              onClick={() => void deletePanelist(state, panelist.id).then(notify)}
-            >
-              Remove
-            </button>
+    <Card
+      title="Panelists"
+      hint="Each starts with the event budget unless overridden. The role is the question they are answering, and the big screen projects it beside their picks."
+    >
+      {/* Suggestions rather than a fixed list: the field stays typed. */}
+      <datalist id="role-suggestions">
+        {DEFAULT_ROLES.map((role) => (
+          <option key={role.name} value={role.name} />
+        ))}
+      </datalist>
+
+      <ul className="space-y-5">
+        {panelists.map((panelist) => (
+          <li key={panelist.id} className="border-ink-500 rounded-sm border p-3">
+            <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_9rem_6rem_auto]">
+              <LiveField
+                label="Name"
+                value={panelist.name}
+                onCommit={(name) =>
+                  void patchPanelist(state, panelist.id, { name }).then(notify)
+                }
+              />
+              <LiveField
+                label="Affiliation (optional)"
+                value={panelist.affiliation}
+                onCommit={(affiliation) =>
+                  void patchPanelist(state, panelist.id, { affiliation }).then(notify)
+                }
+              />
+              <LiveField
+                label="Role"
+                value={panelist.role}
+                list="role-suggestions"
+                placeholder="Investor"
+                onCommit={(role) => void commitRole(panelist.id, role)}
+              />
+              <LiveField
+                label="Budget"
+                type="number"
+                value={panelist.startingBudget}
+                onCommit={(value) =>
+                  void patchPanelist(state, panelist.id, {
+                    startingBudget: Number(value),
+                  }).then(notify)
+                }
+              />
+              <button
+                type="button"
+                className="btn btn-ghost mb-0.5"
+                onClick={() => void deletePanelist(state, panelist.id).then(notify)}
+              >
+                Remove
+              </button>
+            </div>
+
+            <div className="mt-3">
+              <LiveField
+                label="Action prompt — the question this role is answering"
+                value={panelist.rolePrompt}
+                placeholder={
+                  defaultPromptForRole(panelist.role) ??
+                  "What is this panelist trying to build with the findings they pick?"
+                }
+                onCommit={(rolePrompt) =>
+                  void patchPanelist(state, panelist.id, { rolePrompt }).then(notify)
+                }
+              />
+            </div>
           </li>
         ))}
       </ul>
+
+      {missingPrompt.length > 0 ? (
+        <div className="mt-4">
+          <Notice tone="warn">
+            {missingPrompt.map((p) => p.name).join(", ")} — role set, no action prompt. The
+            big screen will show the role on its own.
+          </Notice>
+        </div>
+      ) : null}
 
       <button
         type="button"
@@ -447,127 +363,91 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
   );
 }
 
-function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notify }) {
-  const objectives = sortedObjectives(state);
-  const { breakoutFraming, auctionFraming } = state.event;
-
-  // What the objectives are *for* depends on the format, and the answer changes
-  // how carefully they need writing — a prompt read aloud to open a round is a
-  // different thing from a heading five rooms write risks underneath.
-  const hint = [
-    auctionFraming === "objectives"
-      ? "The order here is the order of the auction rounds."
-      : "The auction runs on finding types, so these do not set the round order.",
-    breakoutFraming === "objectives"
-      ? "Each breakout writes one card per objective, so the prompt is the brief they see."
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  async function move(index: number, direction: -1 | 1) {
-    const ordered = [...objectives];
-    const target = index + direction;
-    if (target < 0 || target >= ordered.length) return;
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    notify(await reorderObjectives(ordered.map((o) => o.id)));
-  }
+/**
+ * The play-along.
+ *
+ * Opening it puts a QR code on the auction screen; the room joins at /play,
+ * picks one of the panel's roles, and allocates its own budget across the
+ * board. Closing it stops new entries without touching the ones already in.
+ */
+function AudienceSettings({ state, notify }: { state: EventState; notify: Notify }) {
+  const joined = state.audience.length;
+  const submitted = state.audience.filter((entry) => entry.submitted).length;
+  const roles = sortedPanelists(state).filter((p) => p.role.trim()).length;
 
   return (
-    <Card title="Strategic objectives" hint={hint}>
-      <ul className="space-y-4">
-        {objectives.map((objective, index) => (
-          <li key={objective.id} className="border-ink-500 rounded-sm border p-3">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="tabular text-signal font-mono text-sm font-bold">
-                {index + 1}
-              </span>
-              <div className="min-w-40 flex-1">
-                <LiveField
-                  label="Name"
-                  value={objective.name}
-                  onCommit={(name) => void patchObjective(objective.id, { name }).then(notify)}
-                />
-              </div>
-              <div className="w-36">
-                <LiveField
-                  label="Short label"
-                  value={objective.shortName}
-                  onCommit={(shortName) =>
-                    void patchObjective(objective.id, { shortName }).then(notify)
-                  }
-                />
-              </div>
-              <div className="mb-0.5 flex gap-1">
-                <button
-                  type="button"
-                  className="btn btn-ghost px-2 py-1"
-                  onClick={() => void move(index, -1)}
-                  disabled={index === 0}
-                  aria-label="Move earlier"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost px-2 py-1"
-                  onClick={() => void move(index, 1)}
-                  disabled={index === objectives.length - 1}
-                  aria-label="Move later"
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost px-2 py-1"
-                  onClick={() => void deleteObjective(state, objective.id).then(notify)}
-                  aria-label="Remove objective"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
+    <Card
+      title="Audience play-along"
+      hint="A QR code on the auction screen lets the room draft its own portfolio. The closing screen compares what the panel paid with what the room would have."
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex gap-6">
+          <Stat label="Joined" value={joined} />
+          <Stat label="Submitted" value={submitted} accent />
+        </div>
+        <button
+          type="button"
+          className={cx("btn", state.event.audienceOpen ? "btn-ghost" : "btn-primary")}
+          onClick={() => void setAudienceOpen(!state.event.audienceOpen).then(notify)}
+        >
+          {state.event.audienceOpen ? "Close play-along" : "Open play-along"}
+        </button>
+      </div>
 
-            <label className="label">Moderator prompt</label>
-            <PromptField
-              value={objective.prompt}
-              onCommit={(prompt) => void patchObjective(objective.id, { prompt }).then(notify)}
-            />
-          </li>
-        ))}
-      </ul>
+      <div className="mt-4 max-w-xs">
+        <LiveField
+          label="Credits per audience member"
+          type="number"
+          value={state.event.audienceBudget}
+          hint="Match the panel budget to make the average directly comparable to a price paid."
+          onCommit={(value) =>
+            void patchEvent(state, { audienceBudget: Number(value) }).then(notify)
+          }
+        />
+      </div>
 
-      <button
-        type="button"
-        className="btn btn-ghost mt-4"
-        onClick={() => void createObjective(state).then(notify)}
-      >
-        + Add objective
-      </button>
+      {roles === 0 ? (
+        <div className="mt-4">
+          <Notice tone="warn">
+            No panelist has a role yet, so the audience has nothing to pick from. Set the
+            roles above before opening this.
+          </Notice>
+        </div>
+      ) : null}
+
+      {state.event.audienceOpen ? (
+        <div className="mt-4">
+          <Notice tone="success">
+            Open. The QR code shows on the <strong>Live Auction</strong> screen, and the
+            comparison is the <strong>Audience vs Panel</strong> big-screen mode.
+          </Notice>
+        </div>
+      ) : null}
     </Card>
   );
 }
 
-function PromptField({
+function Stat({
+  label,
   value,
-  onCommit,
+  accent,
 }: {
-  value: string;
-  onCommit: (value: string) => void;
+  label: string;
+  value: number;
+  accent?: boolean;
 }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-
   return (
-    <textarea
-      className="field"
-      rows={2}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft);
-      }}
-    />
+    <div>
+      <p className="label mb-1">{label}</p>
+      <p
+        className={cx(
+          "tabular text-2xl leading-none font-bold",
+          accent ? "text-signal" : "text-paper",
+        )}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -607,8 +487,6 @@ function BreakoutSettings({ state, notify }: { state: EventState; notify: Notify
 function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
   const [confirm, setConfirm] = useState("");
   const armed = confirm.toUpperCase() === "RESET";
-  const words = lexicon(state);
-  const perRoom = blankCardPlan(state).length;
 
   return (
     <Card
@@ -617,10 +495,8 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
     >
       <div className="space-y-3">
         <Action
-          label={`Seed empty ${words.item} templates`}
-          hint={`Gives every breakout its ${perRoom} blank card${perRoom === 1 ? "" : "s"}, one per ${
-            state.event.breakoutFraming === "objectives" ? "strategic objective" : "finding type"
-          }. Skips rooms that already have cards.`}
+          label="Seed empty finding templates"
+          hint="Gives every breakout its five blank cards. Skips rooms that already have findings."
           onClick={() => void seedBlankFindings(state).then(notify)}
         />
         <Action
@@ -630,9 +506,15 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
         />
         <Action
           label="Reset the auction"
-          hint="Clears every transaction and returns to Round 0. Keeps all cards."
+          hint="Clears every transaction and returns to Round 0. Keeps all findings."
           tone="danger"
           onClick={() => void resetAuction().then(notify)}
+        />
+        <Action
+          label="Clear the audience play-along"
+          hint={`Removes all ${state.audience.length} entries. Run this between the rehearsal and the real session.`}
+          tone="danger"
+          onClick={() => void clearAudience().then(notify)}
         />
       </div>
 
@@ -656,18 +538,9 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
             type="button"
             className="btn btn-danger"
             disabled={!armed}
-            onClick={() => void rebuildBreakoutCards(state).then(notify)}
-            title="Throws away every card and re-seeds blanks matching the session format."
-          >
-            Rebuild breakout cards
-          </button>
-          <button
-            type="button"
-            className="btn btn-danger"
-            disabled={!armed}
             onClick={() => void clearFindings(state).then(notify)}
           >
-            Clear all {words.itemPlural}
+            Clear all findings
           </button>
           <button
             type="button"
@@ -677,6 +550,7 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
               void createNewEvent({
                 demo: true,
                 startingBudget: state.event.startingBudget,
+                roundCount: roundCount(state),
               }).then(notify)
             }
           >
@@ -691,6 +565,7 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
                 demo: false,
                 title: state.event.title,
                 startingBudget: state.event.startingBudget,
+                roundCount: roundCount(state),
               }).then(notify)
             }
           >

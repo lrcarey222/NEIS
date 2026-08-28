@@ -1,9 +1,9 @@
-import { createEvent } from "./seed";
+import { createEvent, DEFAULT_ROUND_COUNT } from "./seed";
 import {
+  type AudienceEntry,
   type Breakout,
   type EventState,
   type Finding,
-  type Objective,
   type Panelist,
   SCHEMA_VERSION,
   type TimerState,
@@ -66,12 +66,9 @@ function normaliseFinding(finding: Partial<Finding>, id: string): Finding {
     id: finding.id ?? id,
     breakoutId: finding.breakoutId ?? "",
     type: finding.type ?? "momentum",
-    objectiveId: finding.objectiveId ?? "",
     headline: finding.headline ?? "",
     whatChanged: finding.whatChanged ?? "",
     evidence: finding.evidence ?? "",
-    risks: finding.risks ?? "",
-    opportunities: finding.opportunities ?? "",
     whyItMatters: finding.whyItMatters ?? "",
     confidence: finding.confidence ?? "medium",
     breakoutRank: finding.breakoutRank ?? 1,
@@ -97,11 +94,39 @@ function normaliseBreakout(breakout: Partial<Breakout>, id: string): Breakout {
 }
 
 /**
+ * One audience entry.
+ *
+ * `allocations` is written by a phone on a conference network, so every value
+ * is re-coerced: a stray string or a negative would otherwise propagate
+ * straight into the averages on the closing screen.
+ */
+function normaliseAudience(entry: Partial<AudienceEntry>, id: string): AudienceEntry {
+  const raw = (entry.allocations ?? {}) as Record<string, unknown>;
+  const allocations: Record<string, number> = {};
+  for (const [findingId, value] of Object.entries(raw)) {
+    const credits = Math.max(0, Math.floor(Number(value) || 0));
+    if (credits > 0) allocations[findingId] = credits;
+  }
+
+  return {
+    id: entry.id ?? id,
+    name: entry.name ?? "",
+    affiliation: entry.affiliation ?? "",
+    role: entry.role ?? "",
+    allocations,
+    submitted: entry.submitted ?? false,
+    createdAt: entry.createdAt ?? 0,
+    updatedAt: entry.updatedAt ?? 0,
+  };
+}
+
+/**
  * Builds a complete EventState from whatever the database returned.
  *
  * Returns null for a genuinely absent event so callers can offer to create one,
  * but tolerates a partially-written event — during the breakout session the
- * findings node exists long before anyone has touched panelists or objectives.
+ * findings node exists long before anyone has touched panelists, and the
+ * audience node does not exist at all until the first phone joins.
  */
 export function fromSnapshot(raw: unknown): EventState | null {
   if (!raw || typeof raw !== "object") return null;
@@ -120,13 +145,14 @@ export function fromSnapshot(raw: unknown): EventState | null {
       // as their defaults, not as undefined.
       minBid: event.minBid ?? 1,
       startingBudget: event.startingBudget ?? 100,
+      // Absent on a schema 1 event, which ran five strategic objectives and so
+      // gave every panelist five picks.
+      roundCount: event.roundCount ?? DEFAULT_ROUND_COUNT,
       currentRoundIndex: event.currentRoundIndex ?? -1,
       displayMode: event.displayMode ?? "board",
       status: event.status ?? "setup",
-      // Absent on an event created before the framings existed; those events
-      // were all findings-into-objectives, which is exactly this default pair.
-      breakoutFraming: event.breakoutFraming ?? "findings",
-      auctionFraming: event.auctionFraming ?? "objectives",
+      audienceOpen: event.audienceOpen ?? false,
+      audienceBudget: event.audienceBudget ?? 100,
       declareWinner: event.declareWinner ?? false,
       showSummary: event.showSummary ?? false,
       enforceBudgetReserve: event.enforceBudgetReserve ?? false,
@@ -138,30 +164,27 @@ export function fromSnapshot(raw: unknown): EventState | null {
     panelists: toArray<Panelist>(data.panelists).map((p) => ({
       ...p,
       affiliation: p.affiliation ?? "",
+      role: p.role ?? "",
+      rolePrompt: p.rolePrompt ?? "",
       startingBudget: p.startingBudget ?? 100,
       sortOrder: p.sortOrder ?? 0,
     })),
-    objectives: toArray<Objective>(data.objectives).map((o) => ({
-      ...o,
-      shortName: o.shortName ?? o.name,
-      prompt: o.prompt ?? "",
-      roundOrder: o.roundOrder ?? 0,
-    })),
+    // A schema 1 transaction also carried `objectiveId`. There are no
+    // objectives any more, so it is read and dropped rather than migrated —
+    // the buyer, the price and the order are the whole record now.
     transactions: toArray<Transaction & { objectiveId?: string }>(
       data.transactions,
     ).map((t) => ({
       id: t.id,
       findingId: t.findingId ?? "",
       panelistId: t.panelistId ?? "",
-      // Schema 1 called this `objectiveId`, because the only kind of slot was a
-      // strategic objective. Read the old name — and drop it from the result,
-      // so the next write does not carry a dead field forward — and a
-      // pre-framing ledger still loads with its buyers and prices intact.
-      slotId: t.slotId ?? t.objectiveId ?? "",
       price: t.price ?? 0,
       timestamp: t.timestamp ?? 0,
       note: t.note ?? "",
     })),
+    audience: toArray<AudienceEntry>(data.audience).map((a) =>
+      normaliseAudience(a, a.id),
+    ),
     timer: { ...DEFAULT_TIMER, ...((data.timer as Partial<TimerState>) ?? {}) },
     revision: (data.revision as number) ?? 0,
   };
@@ -174,8 +197,8 @@ export function toSnapshot(state: EventState): Record<string, unknown> {
     breakouts: toMap(state.breakouts),
     findings: toMap(state.findings),
     panelists: toMap(state.panelists),
-    objectives: toMap(state.objectives),
     transactions: toMap(state.transactions),
+    audience: toMap(state.audience),
     timer: state.timer,
     revision: state.revision,
   });

@@ -1,17 +1,16 @@
 "use client";
 
-import { auctionSlots, blankCardPlan, validateAward, type AwardInput } from "./derive";
+import { roundCount, validateAward, type AwardInput } from "./derive";
 import { net } from "./net";
 import { createBlankFindings, createEvent, type CreateEventOptions } from "./seed";
 import { toMap } from "./serialize";
 import type {
+  AudienceEntry,
   Breakout,
   Confidence,
   EventState,
   Finding,
   FindingType,
-  Framing,
-  Objective,
   Panelist,
   SubmissionStatus,
   Transaction,
@@ -32,6 +31,11 @@ import type {
 //      against the committed state inside a database transaction. Only awards
 //      and undo need this, but for them it is the difference between a correct
 //      scoreboard and a finding sold twice.
+//
+// The audience is the one exception to (1) and it is deliberate: each phone
+// owns exactly one `audience/<id>` node and writes the whole thing, twice.
+// Nobody else touches that node, so there is nothing to clobber, and two
+// writes per person is what a conference network can carry from 150 handsets.
 // ---------------------------------------------------------------------------
 
 export interface Result {
@@ -71,7 +75,7 @@ export async function createNewEvent(options: CreateEventOptions): Promise<Resul
   return guard(() => net().writeEvent(createEvent(options)));
 }
 
-/** Clears the auction but keeps every card the breakouts produced. */
+/** Clears the auction but keeps every finding the breakouts produced. */
 export async function resetAuction(): Promise<Result> {
   return guard(() =>
     net().updatePaths({
@@ -98,58 +102,17 @@ export async function clearFindings(state: EventState): Promise<Result> {
   return guard(() => net().updatePaths(updates));
 }
 
-/**
- * Gives every room its blank cards, skipping rooms that already have some.
- *
- * The roster follows the breakout framing: five typed findings, or one card per
- * strategic objective.
- */
+/** Gives every room its five blank cards, skipping rooms that already have some. */
 export async function seedBlankFindings(state: EventState): Promise<Result> {
-  const plan = blankCardPlan(state);
-  if (plan.length === 0) {
-    return fail("There are no strategic objectives to build cards from. Add some first.");
-  }
-
   const updates: Record<string, unknown> = {};
   for (const breakout of state.breakouts) {
     if (state.findings.some((f) => f.breakoutId === breakout.id)) continue;
-    for (const finding of createBlankFindings(breakout.id, plan)) {
+    for (const finding of createBlankFindings(breakout.id)) {
       updates[`findings/${finding.id}`] = finding;
     }
   }
   if (Object.keys(updates).length === 0) {
-    return fail("Every breakout already has cards.");
-  }
-  return guard(() => net().updatePaths(updates));
-}
-
-/**
- * Throws away every card and re-seeds blanks for the current framing.
- *
- * The escape hatch for switching the breakout framing after the rooms have
- * already been seeded: the existing cards carry the wrong roster, and no
- * per-card edit fixes that. Destructive, so /control keeps it behind RESET.
- */
-export async function rebuildBreakoutCards(state: EventState): Promise<Result> {
-  const plan = blankCardPlan(state);
-  if (plan.length === 0) {
-    return fail("There are no strategic objectives to build cards from. Add some first.");
-  }
-  if (state.transactions.length > 0) {
-    return fail("Cards have already been sold at auction. Reset the auction first.");
-  }
-
-  // The whole `findings` node is replaced in one path rather than as
-  // `findings/<id>` entries plus a `findings: null` — Firebase rejects a
-  // multi-path update whose keys are ancestors of one another.
-  const replacement: Record<string, Finding> = {};
-  const updates: Record<string, unknown> = { findings: replacement };
-  for (const breakout of state.breakouts) {
-    updates[`breakouts/${breakout.id}/submissionStatus`] = "not_started";
-    updates[`breakouts/${breakout.id}/submittedAt`] = null;
-    for (const finding of createBlankFindings(breakout.id, plan)) {
-      replacement[finding.id] = finding;
-    }
+    return fail("Every breakout already has findings.");
   }
   return guard(() => net().updatePaths(updates));
 }
@@ -197,39 +160,47 @@ export async function patchEvent(
 }
 
 /**
- * Switch what the breakouts write, or what the panel's teams are made of.
+ * Sets how many findings each panelist ends up holding.
  *
- * Separate from `patchEvent` because the two fields have consequences a generic
- * field write would not carry: the auction framing redefines what a round *is*,
- * so the round pointer has to go back to standby, and it cannot change at all
- * once transactions exist because every recorded `slotId` would stop resolving.
+ * Refuses to drop below what somebody already owns: the picks would still be
+ * in the ledger, the scoreboard would show a team over its own limit, and no
+ * further bid from that panelist would validate. Undo first.
  */
-export async function setFraming(
+export async function setRoundCount(
   state: EventState,
-  patch: { breakoutFraming?: Framing; auctionFraming?: Framing },
+  count: number,
 ): Promise<Result> {
-  const updates: Record<string, unknown> = {};
-
-  if (patch.breakoutFraming && patch.breakoutFraming !== state.event.breakoutFraming) {
-    updates["event/breakoutFraming"] = patch.breakoutFraming;
+  const next = Math.floor(count);
+  if (!Number.isFinite(next) || next < 1) {
+    return fail("There has to be at least one round.");
+  }
+  if (next > 12) {
+    return fail("Twelve rounds is the most a portfolio card can show legibly.");
   }
 
-  if (patch.auctionFraming && patch.auctionFraming !== state.event.auctionFraming) {
-    if (state.transactions.length > 0) {
-      return fail(
-        "The auction has started, and every recorded award points at a slot in the current format. Reset the auction first.",
-      );
-    }
-    updates["event/auctionFraming"] = patch.auctionFraming;
-    updates["event/currentRoundIndex"] = -1;
+  const mostHeld = Math.max(
+    0,
+    ...state.panelists.map(
+      (p) => state.transactions.filter((t) => t.panelistId === p.id).length,
+    ),
+  );
+  if (next < mostHeld) {
+    return fail(
+      `A panelist already holds ${mostHeld} findings. Undo a pick before cutting the rounds to ${next}.`,
+    );
   }
 
-  if (Object.keys(updates).length === 0) return OK;
-  return guard(() => net().updatePaths(updates));
+  return guard(() =>
+    net().updatePaths({
+      "event/roundCount": next,
+      // The pointer can be left past the end when rounds are removed.
+      "event/currentRoundIndex": Math.min(state.event.currentRoundIndex, next - 1),
+    }),
+  );
 }
 
 export async function setRound(state: EventState, target: number | "next" | "prev") {
-  const last = auctionSlots(state).length - 1;
+  const last = roundCount(state) - 1;
   const current = state.event.currentRoundIndex;
   const next =
     target === "next" ? current + 1 : target === "prev" ? current - 1 : target;
@@ -293,12 +264,9 @@ export type FindingPatch = Partial<
   Pick<
     Finding,
     | "type"
-    | "objectiveId"
     | "headline"
     | "whatChanged"
     | "evidence"
-    | "risks"
-    | "opportunities"
     | "whyItMatters"
     | "confidence"
     | "breakoutRank"
@@ -332,12 +300,9 @@ export async function createFinding(
     id: newId("fd"),
     breakoutId,
     type: patch.type ?? "momentum",
-    objectiveId: patch.objectiveId ?? "",
     headline: patch.headline ?? "",
     whatChanged: patch.whatChanged ?? "",
     evidence: patch.evidence ?? "",
-    risks: patch.risks ?? "",
-    opportunities: patch.opportunities ?? "",
     whyItMatters: patch.whyItMatters ?? "",
     confidence: patch.confidence ?? "medium",
     breakoutRank: patch.breakoutRank ?? siblings.length + 1,
@@ -351,7 +316,7 @@ export async function createFinding(
 
 export async function deleteFinding(state: EventState, id: string): Promise<Result> {
   if (state.transactions.some((t) => t.findingId === id)) {
-    return fail("This card has been sold at auction. Undo the transaction first.");
+    return fail("This finding has been sold at auction. Undo the transaction first.");
   }
   return guard(() => net().removePath(`findings/${id}`));
 }
@@ -407,6 +372,8 @@ export async function createPanelist(state: EventState): Promise<Result> {
     id: newId("pl"),
     name: `Panelist ${state.panelists.length + 1}`,
     affiliation: "",
+    role: "",
+    rolePrompt: "",
     startingBudget: state.event.startingBudget,
     sortOrder: state.panelists.length,
   };
@@ -416,7 +383,12 @@ export async function createPanelist(state: EventState): Promise<Result> {
 export async function patchPanelist(
   state: EventState,
   id: string,
-  patch: Partial<Pick<Panelist, "name" | "affiliation" | "startingBudget" | "sortOrder">>,
+  patch: Partial<
+    Pick<
+      Panelist,
+      "name" | "affiliation" | "role" | "rolePrompt" | "startingBudget" | "sortOrder"
+    >
+  >,
 ): Promise<Result> {
   const panelist = state.panelists.find((p) => p.id === id);
   if (!panelist) return fail("Unknown panelist.");
@@ -448,71 +420,21 @@ export async function deletePanelist(state: EventState, id: string): Promise<Res
   return guard(() => net().removePath(`panelists/${id}`));
 }
 
-// --- Objectives ------------------------------------------------------------
-
-export async function createObjective(state: EventState): Promise<Result> {
-  const objective: Objective = {
-    id: newId("ob"),
-    name: `Objective ${state.objectives.length + 1}`,
-    shortName: "Objective",
-    prompt: "",
-    roundOrder: state.objectives.length,
-  };
-  return guard(() => net().updatePaths({ [`objectives/${objective.id}`]: objective }));
-}
-
-export async function patchObjective(
-  id: string,
-  patch: Partial<Pick<Objective, "name" | "shortName" | "prompt" | "roundOrder">>,
-): Promise<Result> {
-  const updates: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (value !== undefined) updates[`objectives/${id}/${key}`] = value;
-  }
-  return guard(() => net().updatePaths(updates));
-}
-
-export async function reorderObjectives(orderedIds: string[]): Promise<Result> {
-  const updates: Record<string, unknown> = {};
-  orderedIds.forEach((id, index) => {
-    updates[`objectives/${id}/roundOrder`] = index;
-  });
-  return guard(() => net().updatePaths(updates));
-}
-
-export async function deleteObjective(state: EventState, id: string): Promise<Result> {
-  if (state.transactions.some((t) => t.slotId === id)) {
-    return fail(
-      "Cards have already been bought for this objective. Undo those transactions first.",
-    );
-  }
-  // Under the objectives framing the rooms write one card *per* objective, so
-  // removing one would orphan five cards mid-session.
-  if (
-    state.event.breakoutFraming === "objectives" &&
-    state.findings.some((f) => f.objectiveId === id)
-  ) {
-    return fail(
-      "The breakout rooms have cards for this objective. Clear or rebuild the cards first.",
-    );
-  }
-  return guard(() => net().removePath(`objectives/${id}`));
-}
-
 // --- The auction -----------------------------------------------------------
 
 export interface AwardOptions extends AwardInput {
   acknowledgeWarnings?: boolean;
-  advanceRound?: boolean;
+  /** Step the round on once every panelist has picked in the current one. */
+  advanceWhenRoundComplete?: boolean;
   note?: string;
 }
 
 /**
- * Award a card — the single most important write in the application.
+ * Award a finding — the single most important write in the application.
  *
  * The validation runs *inside* a database transaction, against the committed
  * state rather than the copy this browser happened to be rendering. Two
- * operators on two laptops clicking AWARD on the same card cannot both
+ * operators on two laptops clicking AWARD on the same finding cannot both
  * succeed: the second attempt re-reads, fails validation, and aborts.
  */
 export async function awardFinding(options: AwardOptions): Promise<Result> {
@@ -542,7 +464,6 @@ export async function awardFinding(options: AwardOptions): Promise<Result> {
       id: newId("tx"),
       findingId: options.findingId,
       panelistId: options.panelistId,
-      slotId: options.slotId,
       price: options.price,
       timestamp: Date.now(),
       note: options.note ?? "",
@@ -557,12 +478,26 @@ export async function awardFinding(options: AwardOptions): Promise<Result> {
     if (next.event.status === "setup" || next.event.status === "breakouts") {
       next.event.status = "auction";
     }
-    if (options.advanceRound) {
-      next.event.currentRoundIndex = Math.min(
-        next.event.currentRoundIndex + 1,
-        auctionSlots(next).length - 1,
-      );
+
+    // Nobody bids in a fixed order, so "the round is over" is a fact about the
+    // board rather than a click: it is over when every panelist has as many
+    // findings as rounds played. Checked against `next` so the pick just
+    // recorded counts towards it.
+    if (options.advanceWhenRoundComplete) {
+      const target = next.event.currentRoundIndex + 1;
+      const everyoneHasPicked =
+        next.panelists.length > 0 &&
+        next.panelists.every(
+          (p) => next.transactions.filter((t) => t.panelistId === p.id).length >= target,
+        );
+      if (everyoneHasPicked) {
+        next.event.currentRoundIndex = Math.min(
+          next.event.currentRoundIndex + 1,
+          Math.max(1, Math.floor(next.event.roundCount || 1)) - 1,
+        );
+      }
     }
+
     next.revision = (state.revision ?? 0) + 1;
     return next;
   });
@@ -619,7 +554,7 @@ export async function undoTransaction(
 /** Correct a recorded transaction in place — wrong price, wrong panelist. */
 export async function patchTransaction(
   id: string,
-  patch: Partial<Pick<Transaction, "panelistId" | "slotId" | "price" | "note">>,
+  patch: Partial<Pick<Transaction, "panelistId" | "price" | "note">>,
   acknowledgeWarnings = false,
 ): Promise<Result> {
   let rejection: Result | null = null;
@@ -636,7 +571,6 @@ export async function patchTransaction(
     const validation = validateAward(state, {
       findingId: merged.findingId,
       panelistId: merged.panelistId,
-      slotId: merged.slotId,
       price: merged.price,
       excludeTransactionId: id,
     });
@@ -655,7 +589,7 @@ export async function patchTransaction(
 
     return {
       ...state,
-      transactions: state.transactions.map((t) => (t.id === id ? merged : t)),
+      transactions: state.transactions.map((t) => (t === existing ? merged : t)),
       revision: (state.revision ?? 0) + 1,
     };
   });
@@ -663,6 +597,45 @@ export async function patchTransaction(
   if (rejection) return rejection;
   if (!committed) return fail("Could not save — the board changed. Check it and retry.");
   return OK;
+}
+
+// --- Audience play-along ---------------------------------------------------
+
+/**
+ * Create or update one audience member's entry.
+ *
+ * The whole node is written, which is safe because nobody shares it, and it is
+ * called twice in the normal case: once on joining (so the operator can watch
+ * the room arrive) and once on submitting. Allocations are not streamed.
+ */
+export async function saveAudienceEntry(entry: AudienceEntry): Promise<Result> {
+  const payload: AudienceEntry = {
+    ...entry,
+    name: entry.name.trim(),
+    affiliation: entry.affiliation.trim(),
+    role: entry.role.trim(),
+    // RTDB deletes keys whose value is null and drops an empty object, so a
+    // cleared allocation has to leave as an absent key rather than a zero.
+    allocations: Object.fromEntries(
+      Object.entries(entry.allocations).filter(([, credits]) => credits > 0),
+    ),
+    updatedAt: Date.now(),
+  };
+  return guard(() => net().updatePaths({ [`audience/${entry.id}`]: payload }));
+}
+
+/** Open or close /play. Closing leaves every entry in place. */
+export async function setAudienceOpen(open: boolean): Promise<Result> {
+  return guard(() => net().updatePaths({ "event/audienceOpen": open }));
+}
+
+export async function deleteAudienceEntry(id: string): Promise<Result> {
+  return guard(() => net().removePath(`audience/${id}`));
+}
+
+/** Wipes the play-along so a rehearsal's entries do not pollute the real one. */
+export async function clearAudience(): Promise<Result> {
+  return guard(() => net().updatePaths({ audience: null }));
 }
 
 /** Used by the tests to build a state object the same way the app does. */

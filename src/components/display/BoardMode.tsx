@@ -5,23 +5,20 @@ import { useMemo } from "react";
 import { FindingCard } from "@/components/FindingCard";
 import { EmptyState, cx } from "@/components/primitives";
 import {
-  blankCardPlan,
   buildFindingView,
   findingsForBreakout,
-  lexicon,
   sortedBreakouts,
   type FindingView,
 } from "@/lib/derive";
 import type { EventState } from "@/lib/types";
 
 /**
- * Mode 1 — the board.
+ * Mode 1 — the Strategic Findings Board.
  *
- * One column per breakout, cards in the breakout's own ranked order. The whole
- * board has to fit on a 16:9 screen without scrolling, so the columns flex and
- * the cards stay compact; the detail panel carries everything that does not
- * fit. Whether a card is a Strategic Finding or a Strategic Objective is the
- * session format's business, not this component's — it only reads the words.
+ * One column per breakout, findings in the breakout's own ranked order. The
+ * whole board has to fit on a 16:9 screen without scrolling, so the columns
+ * flex and the cards stay compact; the detail panel carries everything that
+ * does not fit.
  */
 export function BoardMode({
   state,
@@ -30,9 +27,6 @@ export function BoardMode({
   state: EventState;
   onOpenFinding: (view: FindingView) => void;
 }) {
-  const words = lexicon(state);
-  const perRoom = blankCardPlan(state).length;
-
   const columns = useMemo(() => {
     return sortedBreakouts(state).map((breakout) => {
       const findings = findingsForBreakout(state, breakout.id)
@@ -52,13 +46,13 @@ export function BoardMode({
     return (
       <div className="flex flex-1 items-center justify-center p-[3em]">
         <div className="max-w-[26em] text-center">
-          <p className="eyebrow mb-[0.75em]">{words.boardTitle}</p>
+          <p className="eyebrow mb-[0.75em]">Strategic Findings Board</p>
           <h2 className="text-paper text-[1.75em] leading-tight font-semibold">
             Waiting for the breakout sessions
           </h2>
           <p className="text-paper-mute mt-[0.75em] text-[0.9375em] leading-relaxed">
-            {words.ItemPlural} appear here the moment each room submits.{" "}
-            {sortedBreakouts(state).length} breakouts, {perRoom} {words.itemPlural} each.
+            Findings appear here the moment each room submits. Five breakouts, five
+            findings each.
           </p>
           <div className="mt-[2em] flex justify-center gap-[0.75em]">
             {sortedBreakouts(state).map((breakout) => (
@@ -88,10 +82,10 @@ export function BoardMode({
     <div className="flex flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
       <div className="mb-[0.7em] flex items-baseline justify-between">
         <div>
-          <p className="eyebrow">{words.boardTitle}</p>
+          <p className="eyebrow">Strategic Findings Board</p>
           <h2 className="text-paper mt-[0.15em] text-[1.375em] leading-none font-semibold">
-            {totalSubmitted} {words.itemPlural} from{" "}
-            {columns.filter((c) => c.findings.length).length} breakouts
+            {totalSubmitted} findings from {columns.filter((c) => c.findings.length).length}{" "}
+            breakouts
           </h2>
         </div>
         <p className="text-paper-mute tabular font-mono text-[0.75em] tracking-[0.1em] uppercase">
@@ -110,7 +104,7 @@ export function BoardMode({
               </h3>
               <p className="text-paper-faint mt-[0.35em] font-mono text-[0.5625em] tracking-[0.12em] uppercase">
                 {findings.length
-                  ? `${findings.length} ${words.itemPlural}`
+                  ? `${findings.length} findings`
                   : breakout.submissionStatus === "drafting"
                     ? "Drafting"
                     : "Not submitted"}

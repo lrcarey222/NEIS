@@ -1,16 +1,15 @@
 "use client";
 
 import type { FindingView } from "@/lib/derive";
-import { CategoryChip, ConfidenceTag, RankTag, cx } from "./primitives";
+import { ConfidenceTag, RankTag, TypeChip, cx } from "./primitives";
 
 /**
- * A breakout card as it appears on the board and in the auction pool.
+ * The finding as it appears on the board and in the auction pool.
  *
- * Hierarchy is deliberate and matches the brief: breakout and category first
- * (the coloured left bar and the chip), then the headline at the largest size
- * on the card, then the metadata row. From the back of the room the bar and the
- * headline are what carry. The category is a finding type or a strategic
- * objective depending on the framing; nothing here needs to know which.
+ * Hierarchy is deliberate and matches the brief: breakout and finding type
+ * first (the coloured left bar and the chip), then the headline at the largest
+ * size on the card, then the metadata row. From the back of the room the bar
+ * and the headline are what carry.
  */
 export function FindingCard({
   view,
@@ -24,12 +23,12 @@ export function FindingCard({
   /** Play the "leaving the board" animation — set briefly after a sale. */
   soldAnimation?: boolean;
 }) {
-  const { finding, category, isDrafted, panelist, slot, transaction } = view;
+  const { finding, isDrafted, panelist, transaction } = view;
   const interactive = Boolean(onOpen);
 
   return (
     <article
-      data-accent={category.accent}
+      data-type={finding.type}
       data-finding-id={finding.id}
       className={cx(
         "type-bar panel group relative w-full text-left transition-colors",
@@ -54,7 +53,7 @@ export function FindingCard({
       }
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
-      aria-label={interactive ? `Open card: ${finding.headline}` : undefined}
+      aria-label={interactive ? `Open finding: ${finding.headline}` : undefined}
     >
       <div
         className={cx(
@@ -62,7 +61,7 @@ export function FindingCard({
           compact ? "mb-[0.4em]" : "mb-2",
         )}
       >
-        <CategoryChip category={category} size={compact ? "sm" : "md"} />
+        <TypeChip type={finding.type} size={compact ? "sm" : "md"} />
         {isDrafted ? (
           <span className="bg-signal text-ink-900 rounded-sm px-1.5 py-0.5 font-mono text-[0.5625em] font-bold tracking-[0.14em] uppercase">
             Drafted
@@ -81,7 +80,7 @@ export function FindingCard({
         title={finding.headline || undefined}
       >
         {finding.headline || (
-          <span className="text-paper-faint italic">Untitled card</span>
+          <span className="text-paper-faint italic">Untitled finding</span>
         )}
       </h3>
 
@@ -101,19 +100,19 @@ export function FindingCard({
             "border-ink-500 border-t",
             compact ? "mt-[0.35em] pt-[0.35em]" : "mt-2.5 pt-2",
           )}
-          // On the board the slot goes in the tooltip rather than a second
-          // line: buyer and price are what the room reads at a glance, and the
-          // full record is one click away in the detail panel.
-          title={slot ? `Purchased for ${slot.name}` : undefined}
+          // On the board the buyer's role goes in the tooltip rather than a
+          // second line: name and price are what the room reads at a glance,
+          // and the full record is one click away in the detail panel.
+          title={panelist.role ? `Drafted by ${panelist.name} as ${panelist.role}` : undefined}
         >
           <p className="text-paper-dim truncate text-[0.75em] leading-tight font-medium">
             {panelist.name}
             <span className="text-paper-faint"> · </span>
             <span className="tabular text-signal">{transaction?.price}</span>
-            {compact ? null : (
+            {compact || !panelist.role ? null : (
               <>
                 <span className="text-paper-faint"> · </span>
-                <span className="text-paper-faint">{slot?.name}</span>
+                <span className="text-paper-faint">{panelist.role}</span>
               </>
             )}
           </p>

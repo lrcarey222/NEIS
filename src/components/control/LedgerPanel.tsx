@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { Notice } from "@/components/primitives";
-import { auctionSlots, byId, lexicon, sortedPanelists } from "@/lib/derive";
+import { byId, sortedPanelists } from "@/lib/derive";
 import { patchTransaction, undoTransaction } from "@/lib/actions";
 import type { EventState, Transaction } from "@/lib/types";
 
@@ -18,7 +18,6 @@ import type { EventState, Transaction } from "@/lib/types";
 export function LedgerPanel({ state }: { state: EventState }) {
   const findings = byId(state.findings);
   const panelists = byId(state.panelists);
-  const slots = byId(auctionSlots(state));
   const breakouts = byId(state.breakouts);
 
   const ordered = useMemo(
@@ -129,12 +128,12 @@ export function LedgerPanel({ state }: { state: EventState }) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <p className="text-paper-faint font-mono text-[0.625rem] tracking-[0.1em] uppercase">
-                        {slots.get(transaction.slotId)?.name ?? "—"}
+                        {panelists.get(transaction.panelistId)?.role || "no role"}
                         {" · "}
                         {finding ? breakouts.get(finding.breakoutId)?.shortName : "—"}
                       </p>
                       <p className="text-paper mt-1 text-sm leading-snug font-medium">
-                        {finding?.headline ?? "(card removed)"}
+                        {finding?.headline ?? "(finding removed)"}
                       </p>
                       <p className="text-paper-mute mt-1 text-xs">
                         {panelists.get(transaction.panelistId)?.name ?? "—"} ·{" "}
@@ -181,9 +180,7 @@ function EditTransaction({
   transaction: Transaction;
   onDone: () => void;
 }) {
-  const words = lexicon(state);
   const [panelistId, setPanelistId] = useState(transaction.panelistId);
-  const [slotId, setSlotId] = useState(transaction.slotId);
   const [price, setPrice] = useState(String(transaction.price));
   const [note, setNote] = useState(transaction.note);
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +190,7 @@ function EditTransaction({
     setBusy(true);
     const result = await patchTransaction(
       transaction.id,
-      { panelistId, slotId, price: Number.parseInt(price, 10), note },
+      { panelistId, price: Number.parseInt(price, 10), note },
       true,
     );
     setBusy(false);
@@ -211,7 +208,7 @@ function EditTransaction({
 
   return (
     <div className="border-ink-500 mt-3 space-y-3 rounded-sm border p-3">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="label">Panelist</label>
           <select
@@ -222,20 +219,7 @@ function EditTransaction({
             {sortedPanelists(state).map((panelist) => (
               <option key={panelist.id} value={panelist.id}>
                 {panelist.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">{words.Slot}</label>
-          <select
-            className="field"
-            value={slotId}
-            onChange={(event) => setSlotId(event.target.value)}
-          >
-            {auctionSlots(state).map((slot) => (
-              <option key={slot.id} value={slot.id}>
-                {slot.name}
+                {panelist.role ? ` — ${panelist.role}` : ""}
               </option>
             ))}
           </select>

@@ -6,11 +6,12 @@ import { FindingDetail } from "@/components/FindingDetail";
 import { Logo } from "@/components/Logo";
 import { StatusDot, cx } from "@/components/primitives";
 import { CountdownDisplay } from "@/components/Timer";
+import { AudienceMode } from "@/components/display/AudienceMode";
 import { AuctionMode } from "@/components/display/AuctionMode";
 import { BoardMode } from "@/components/display/BoardMode";
 import { InstructionsMode } from "@/components/display/InstructionsMode";
 import { PortfoliosMode } from "@/components/display/PortfoliosMode";
-import { lexicon, type FindingView } from "@/lib/derive";
+import type { FindingView } from "@/lib/derive";
 import { useEvent } from "@/lib/useEvent";
 import type { DisplayMode } from "@/lib/types";
 
@@ -40,7 +41,8 @@ export default function DisplayPage() {
       if (event.key === "1") setModeOverride("board");
       if (event.key === "2") setModeOverride("auction");
       if (event.key === "3") setModeOverride("portfolios");
-      if (event.key === "4") setModeOverride("instructions");
+      if (event.key === "4") setModeOverride("audience");
+      if (event.key === "5") setModeOverride("instructions");
       if (event.key === "f" || event.key === "F") {
         if (document.fullscreenElement) void document.exitFullscreen();
         else void document.documentElement.requestFullscreen().catch(() => {});
@@ -99,11 +101,7 @@ export default function DisplayPage() {
 
         <div className="flex items-center gap-[1.5em]">
           {state.timer.visible ? <CountdownDisplay timer={state.timer} size="md" /> : null}
-          <ModeIndicator
-            mode={mode}
-            boardLabel={lexicon(state).boardTitle}
-            overridden={modeOverride !== null}
-          />
+          <ModeIndicator mode={mode} overridden={modeOverride !== null} />
           <StatusDot status={status} />
         </div>
       </header>
@@ -114,32 +112,29 @@ export default function DisplayPage() {
         <BoardMode state={state} onOpenFinding={openFinding} />
       ) : mode === "auction" ? (
         <AuctionMode state={state} onOpenFinding={openFinding} />
+      ) : mode === "audience" ? (
+        <AudienceMode state={state} />
       ) : (
         <PortfoliosMode state={state} onOpenFinding={openFinding} />
       )}
 
-      <FindingDetail
-        view={detail}
-        slotLabel={lexicon(state).Slot}
-        onClose={() => setDetail(null)}
-      />
+      <FindingDetail view={detail} onClose={() => setDetail(null)} />
     </main>
   );
 }
 
 function ModeIndicator({
   mode,
-  boardLabel,
   overridden,
 }: {
   mode: DisplayMode;
-  boardLabel: string;
   overridden: boolean;
 }) {
   const labels: Record<DisplayMode, string> = {
-    board: boardLabel,
+    board: "Findings Board",
     auction: "Live Auction",
     portfolios: "Final Portfolios",
+    audience: "Audience vs Panel",
     instructions: "Instructions",
   };
 

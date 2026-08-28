@@ -3,19 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FindingCard } from "@/components/FindingCard";
+import { QrCode } from "@/components/QrCode";
 import { cx } from "@/components/primitives";
 import {
   allPanelistViews,
-  auctionSlots,
   availableFindings,
   buildFindingView,
-  currentSlot,
-  findingCategory,
-  lexicon,
+  roundCount,
+  roundNumbers,
+  submittedEntries,
   type FindingView,
   type PanelistView,
-  type Slot,
 } from "@/lib/derive";
+import { useSiteUrl } from "@/lib/useSiteUrl";
 import type { EventState } from "@/lib/types";
 
 /**
@@ -24,7 +24,9 @@ import type { EventState } from "@/lib/types";
  * portfolios down the left two thirds, available pool on the right.
  *
  * Remaining budget is the single largest number on any panelist card, because
- * that is the number the room is doing arithmetic on between bids.
+ * that is the number the room is doing arithmetic on between bids. Under the
+ * name sits the role and its question — the panel is drafting free-form, so
+ * what a pick is *for* is the only thing that makes it judgeable.
  */
 export function AuctionMode({
   state,
@@ -33,47 +35,45 @@ export function AuctionMode({
   state: EventState;
   onOpenFinding: (view: FindingView) => void;
 }) {
-  const words = lexicon(state);
-  const round = currentSlot(state);
-  const slots = useMemo(() => auctionSlots(state), [state]);
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const available = useMemo(() => availableFindings(state), [state]);
   const justSold = useJustSold(state);
 
-  const roundNumber = state.event.currentRoundIndex + 1;
+  const rounds = roundCount(state);
+  const roundIndex = state.event.currentRoundIndex;
+  const roundNumber = roundIndex + 1;
+  const inProgress = roundIndex >= 0 && roundIndex < rounds;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
       {/* Round banner */}
       <div className="border-ink-500 mb-[1em] border-b pb-[0.875em]">
-        {round ? (
-          <div className="flex items-end justify-between gap-[2em]">
-            <div className="min-w-0">
-              <p className="eyebrow text-signal">
-                Round {roundNumber} of {slots.length}
-              </p>
-              <h2 className="text-paper mt-[0.15em] text-[2.5em] leading-none font-bold tracking-tight uppercase">
-                {round.name}
-              </h2>
-              <p className="text-paper-mute mt-[0.6em] max-w-[52em] text-[0.9375em] leading-snug">
-                {round.prompt}
-              </p>
-            </div>
-            <RoundPips slots={slots} current={state.event.currentRoundIndex} />
-          </div>
-        ) : (
-          <div>
-            <p className="eyebrow text-signal">Auction</p>
-            <h2 className="text-paper mt-[0.15em] text-[2.25em] leading-none font-bold tracking-tight uppercase">
-              {state.event.currentRoundIndex < 0 ? "Standing by" : "Rounds complete"}
+        <div className="flex items-end justify-between gap-[2em]">
+          <div className="min-w-0">
+            <p className="eyebrow text-signal">
+              {inProgress
+                ? `Round ${roundNumber} of ${rounds}`
+                : roundIndex < 0
+                  ? "Auction"
+                  : "Rounds complete"}
+            </p>
+            <h2 className="text-paper mt-[0.15em] text-[2.5em] leading-none font-bold tracking-tight uppercase">
+              {inProgress
+                ? `Pick ${roundNumber}`
+                : roundIndex < 0
+                  ? "Standing by"
+                  : "Draft complete"}
             </h2>
-            <p className="text-paper-mute mt-[0.5em] text-[0.9375em]">
-              {state.event.currentRoundIndex < 0
-                ? "The moderator will open Round 1 shortly."
-                : `Every ${words.slot} has been contested.`}
+            <p className="text-paper-mute mt-[0.6em] max-w-[52em] text-[0.9375em] leading-snug">
+              {inProgress
+                ? "Any finding on the board, for any reason. Each panelist is building the strongest set for the question under their name."
+                : roundIndex < 0
+                  ? "The moderator will open Round 1 shortly."
+                  : "Every panelist has drafted a full team."}
             </p>
           </div>
-        )}
+          <RoundPips rounds={roundNumbers(state)} current={roundIndex} />
+        </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_20em] gap-[1.25em]">
@@ -95,49 +95,97 @@ export function AuctionMode({
               key={view.panelist.id}
               state={state}
               view={view}
-              activeSlotId={round?.id ?? null}
+              rounds={rounds}
+              awaitingPick={roundIndex >= 0 && view.filledCount <= roundIndex}
               highlightFindingId={justSold?.findingId ?? null}
               onOpenFinding={onOpenFinding}
             />
           ))}
         </div>
 
-        {/* Available pool */}
-        <section className="flex min-h-0 flex-col">
-          <header className="border-ink-500 mb-[0.625em] flex items-baseline justify-between border-b pb-[0.5em]">
-            <h3 className="eyebrow">On the board</h3>
-            <span className="tabular text-signal font-mono text-[0.875em] font-bold">
-              {available.length}
-            </span>
-          </header>
-          <div className="scroll-fade flex min-h-0 flex-1 flex-col gap-[0.5em] overflow-y-auto pr-[0.25em]">
-            {available.length === 0 ? (
-              <p className="text-paper-faint py-[2em] text-center text-[0.8125em]">
-                No {words.itemPlural} remaining.
-              </p>
-            ) : (
-              available.map((view) => (
-                <FindingCard
-                  key={view.finding.id}
-                  view={view}
-                  onOpen={onOpenFinding}
-                  compact
-                  soldAnimation={justSold?.findingId === view.finding.id}
-                />
-              ))
-            )}
-          </div>
-        </section>
+        {/* Right column: play-along, then the available pool. */}
+        <div className="flex min-h-0 flex-col gap-[0.875em]">
+          {state.event.audienceOpen ? <PlayAlongTile state={state} /> : null}
+
+          <section className="flex min-h-0 flex-1 flex-col">
+            <header className="border-ink-500 mb-[0.625em] flex items-baseline justify-between border-b pb-[0.5em]">
+              <h3 className="eyebrow">On the board</h3>
+              <span className="tabular text-signal font-mono text-[0.875em] font-bold">
+                {available.length}
+              </span>
+            </header>
+            <div className="scroll-fade flex min-h-0 flex-1 flex-col gap-[0.5em] overflow-y-auto pr-[0.25em]">
+              {available.length === 0 ? (
+                <p className="text-paper-faint py-[2em] text-center text-[0.8125em]">
+                  No findings remaining.
+                </p>
+              ) : (
+                available.map((view) => (
+                  <FindingCard
+                    key={view.finding.id}
+                    view={view}
+                    onOpen={onOpenFinding}
+                    compact
+                    soldAnimation={justSold?.findingId === view.finding.id}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
 }
 
-function RoundPips({ slots, current }: { slots: Slot[]; current: number }) {
+/**
+ * The audience's way in, on screen for the whole auction.
+ *
+ * The live count is the point as much as the code is: a number that climbs
+ * while the panel bids tells the room the play-along is real, and tells the
+ * operator the network is working without leaving the projector.
+ */
+function PlayAlongTile({ state }: { state: EventState }) {
+  const site = useSiteUrl();
+  const playing = submittedEntries(state).length;
+  const joined = state.audience.length;
+
+  return (
+    <section className="panel shrink-0 p-[0.75em]">
+      <div className="flex items-start gap-[0.75em]">
+        <QrCode
+          url={site.link("play")}
+          className="w-[6.5em] shrink-0 p-[0.3em]"
+          label="Scan to play along"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="eyebrow text-signal">Play along</p>
+          <p className="text-paper mt-[0.25em] text-[0.9375em] leading-tight font-semibold">
+            Draft your own {state.event.audienceBudget} credits
+          </p>
+          <p className="text-paper-faint mt-[0.3em] font-mono text-[0.5625em] leading-snug break-all">
+            {site.display}/play/
+          </p>
+          <p className="mt-[0.45em] flex items-baseline gap-[0.35em]">
+            <span className="tabular text-signal font-mono text-[1.5em] leading-none font-bold">
+              {playing}
+            </span>
+            <span className="text-paper-mute font-mono text-[0.625em] tracking-[0.1em] uppercase">
+              submitted
+              {joined > playing ? ` · ${joined - playing} drafting` : ""}
+            </span>
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RoundPips({ rounds, current }: { rounds: number[]; current: number }) {
   return (
     <ol className="flex shrink-0 gap-[0.5em]">
-      {slots.map((slot, index) => (
-        <li key={slot.id} className="flex flex-col items-center gap-[0.4em]">
+      {rounds.map((round, index) => (
+        <li key={round} className="flex flex-col items-center gap-[0.4em]">
           <span
             className={cx(
               "h-[0.25em] w-[3em] rounded-full",
@@ -146,11 +194,11 @@ function RoundPips({ slots, current }: { slots: Slot[]; current: number }) {
           />
           <span
             className={cx(
-              "font-mono text-[0.5625em] tracking-[0.1em] uppercase",
+              "tabular font-mono text-[0.5625em] tracking-[0.1em] uppercase",
               index === current ? "text-signal" : "text-paper-faint",
             )}
           >
-            {slot.shortName}
+            {round}
           </span>
         </li>
       ))}
@@ -161,13 +209,16 @@ function RoundPips({ slots, current }: { slots: Slot[]; current: number }) {
 function PanelistColumn({
   state,
   view,
-  activeSlotId,
+  rounds,
+  awaitingPick,
   highlightFindingId,
   onOpenFinding,
 }: {
   state: EventState;
   view: PanelistView;
-  activeSlotId: string | null;
+  rounds: number;
+  /** Has not yet picked in the round currently on screen. */
+  awaitingPick: boolean;
   highlightFindingId: string | null;
   onOpenFinding: (view: FindingView) => void;
 }) {
@@ -180,8 +231,24 @@ function PanelistColumn({
         <h3 className="text-paper truncate text-[1em] leading-tight font-semibold">
           {panelist.name}
         </h3>
-        {panelist.affiliation ? (
+
+        {/* The lens, then the question. Two lines at most: five of these plus
+            the budget block and the picks share one 16:9 column. */}
+        {panelist.role ? (
+          <p className="text-signal mt-[0.25em] truncate font-mono text-[0.625em] font-semibold tracking-[0.1em] uppercase">
+            {panelist.role}
+            {panelist.affiliation ? (
+              <span className="text-paper-faint"> · {panelist.affiliation}</span>
+            ) : null}
+          </p>
+        ) : panelist.affiliation ? (
           <p className="text-paper-faint truncate text-[0.6875em]">{panelist.affiliation}</p>
+        ) : null}
+
+        {panelist.rolePrompt ? (
+          <p className="text-paper-mute mt-[0.3em] line-clamp-2 text-[0.625em] leading-snug italic">
+            {panelist.rolePrompt}
+          </p>
         ) : null}
 
         {/* Budget: the biggest thing on the card, by design. */}
@@ -209,29 +276,29 @@ function PanelistColumn({
         </div>
       </header>
 
-      {/* Slots share the card height evenly, so the roster reads as fixed
-          positions rather than a list that happens to be short. */}
+      {/* Picks share the card height evenly, so the team reads as a fixed
+          roster rather than a list that happens to be short. */}
       <ol className="flex min-h-0 flex-1 flex-col gap-[0.35em] p-[0.6em]">
-        {slots.map((entry) => {
-          const { slot, finding, transaction, breakout } = entry;
-          const isActive = slot.id === activeSlotId && !transaction;
+        {Array.from({ length: Math.max(rounds, slots.length) }, (_, index) => {
+          const slot = slots[index];
+          const finding = slot?.finding ?? null;
+          const transaction = slot?.transaction ?? null;
+          // Only the first empty position is "up next"; the rest are just open.
+          const isNext = awaitingPick && index === view.filledCount;
           const isNew = finding?.id === highlightFindingId;
-          // Coloured by what was bought, not by the position it fills, so the
-          // spread of a portfolio is readable at a glance.
-          const category = finding ? findingCategory(state, finding) : null;
 
           return (
             <li
-              key={slot.id}
-              data-accent={category?.accent}
+              key={index}
+              data-type={finding?.type}
               className={cx(
-                // flex-1 without overflow-hidden: slots share the spare height,
+                // flex-1 without overflow-hidden: picks share the spare height,
                 // but min-height:auto still floors each one at its content, so a
-                // filled slot never clips its headline.
+                // filled pick never clips its headline.
                 "flex flex-1 flex-col rounded-sm px-[0.5em] py-[0.45em] transition-colors",
                 transaction
                   ? "type-bar bg-ink-700"
-                  : isActive
+                  : isNext
                     ? "border-signal/50 bg-signal/[0.06] border border-dashed"
                     : "border-ink-500 border border-dashed",
                 isNew && "animate-flash",
@@ -239,11 +306,11 @@ function PanelistColumn({
             >
               <p
                 className={cx(
-                  "font-mono text-[0.5625em] leading-tight font-semibold tracking-[0.1em] uppercase",
-                  isActive ? "text-signal" : "text-paper-faint",
+                  "tabular font-mono text-[0.5625em] leading-tight font-semibold tracking-[0.1em] uppercase",
+                  isNext ? "text-signal" : "text-paper-faint",
                 )}
               >
-                {slot.name}
+                Pick {index + 1}
               </p>
 
               {finding && transaction ? (
@@ -252,7 +319,7 @@ function PanelistColumn({
                   onClick={() => onOpenFinding(buildFindingView(state, finding))}
                   className="mt-[0.3em] w-full text-left"
                 >
-                  {/* Two lines, not three: five filled slots plus the budget
+                  {/* Two lines, not three: five filled picks plus the budget
                       header have to fit the card at 16:9. The full headline is
                       on the right-hand pool and in the detail panel. */}
                   <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">
@@ -260,7 +327,7 @@ function PanelistColumn({
                   </p>
                   <p className="mt-[0.3em] flex items-center gap-[0.4em]">
                     <span className="type-text font-mono text-[0.5625em] font-semibold tracking-[0.1em] uppercase">
-                      {breakout?.shortName}
+                      {slot?.breakout?.shortName}
                     </span>
                     <span className="text-paper-faint">·</span>
                     <span className="tabular text-signal font-mono text-[0.625em] font-bold">
@@ -272,10 +339,10 @@ function PanelistColumn({
                 <p
                   className={cx(
                     "mt-[0.3em] font-mono text-[0.6875em] font-bold tracking-[0.14em] uppercase",
-                    isActive ? "text-signal" : "text-paper-faint",
+                    isNext ? "text-signal" : "text-paper-faint",
                   )}
                 >
-                  {isActive ? "◂ Bidding" : "Open"}
+                  {isNext ? "◂ Bidding" : "Open"}
                 </p>
               )}
             </li>

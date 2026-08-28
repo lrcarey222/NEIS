@@ -11,12 +11,11 @@
 
 import {
   type Breakout,
+  DEFAULT_ROLES,
   type EventState,
   type Finding,
   FINDING_TYPES,
   type FindingType,
-  type Framing,
-  type Objective,
   type Panelist,
   SCHEMA_VERSION,
 } from "./types";
@@ -74,55 +73,25 @@ export const BREAKOUT_BLUEPRINT: Omit<
   },
 ];
 
-export const OBJECTIVE_BLUEPRINT: Objective[] = [
-  {
-    id: "ob-political",
-    name: "Political Durability",
-    shortName: "Political",
-    prompt:
-      "Which finding from anywhere on the board matters most for building or maintaining durable political support for U.S. energy industrial strategy?",
-    roundOrder: 0,
-  },
-  {
-    id: "ob-security",
-    name: "National Security",
-    shortName: "Security",
-    prompt:
-      "Which finding matters most for the security of U.S. supply chains, critical inputs, and strategic industrial capability?",
-    roundOrder: 1,
-  },
-  {
-    id: "ob-competitiveness",
-    name: "Economic Competitiveness",
-    shortName: "Competitiveness",
-    prompt:
-      "Which finding matters most for whether U.S. firms and workers win in the industries that define the next decade?",
-    roundOrder: 2,
-  },
-  {
-    id: "ob-climate",
-    name: "Climate & Technological Progress",
-    shortName: "Climate & Tech",
-    prompt:
-      "Which finding matters most for the pace of emissions reduction and the advance of the underlying technology base?",
-    roundOrder: 3,
-  },
-  {
-    id: "ob-affordability",
-    name: "Energy Security & Affordability",
-    shortName: "Affordability",
-    prompt:
-      "Which finding matters most for reliable, affordable energy for American households and businesses?",
-    roundOrder: 4,
-  },
-];
+/**
+ * One seat per default role.
+ *
+ * The names are placeholders the operator overwrites in Setup; the roles are
+ * the point, because they are what the panel drafts against and what the
+ * audience picks from at /play.
+ */
+export const PANELIST_BLUEPRINT: Omit<Panelist, "startingBudget">[] =
+  DEFAULT_ROLES.map((role, index) => ({
+    id: `pl-${index + 1}`,
+    name: `Panelist ${index + 1}`,
+    affiliation: "",
+    role: role.name,
+    rolePrompt: role.prompt,
+    sortOrder: index,
+  }));
 
-export const PANELIST_BLUEPRINT: Omit<Panelist, "startingBudget">[] = [
-  { id: "pl-1", name: "Panelist 1", affiliation: "", sortOrder: 0 },
-  { id: "pl-2", name: "Panelist 2", affiliation: "", sortOrder: 1 },
-  { id: "pl-3", name: "Panelist 3", affiliation: "", sortOrder: 2 },
-  { id: "pl-4", name: "Panelist 4", affiliation: "", sortOrder: 3 },
-];
+/** Findings each panelist ends up holding, and therefore rounds of bidding. */
+export const DEFAULT_ROUND_COUNT = 5;
 
 // --- Demo findings ---------------------------------------------------------
 
@@ -500,15 +469,9 @@ function makeFindings(submitted: boolean): Finding[] {
         id: `fd-${breakout.slug}-${seed.type}`,
         breakoutId: breakout.id,
         type: seed.type,
-        // The demo content is written as findings; under the objectives framing
-        // it is pinned to the objective in the matching round position so the
-        // rehearsal board still fills out.
-        objectiveId: OBJECTIVE_BLUEPRINT[index % OBJECTIVE_BLUEPRINT.length].id,
         headline: seed.headline,
         whatChanged: seed.whatChanged,
         evidence: seed.evidence,
-        risks: "",
-        opportunities: "",
         whyItMatters: seed.whyItMatters,
         confidence: seed.confidence,
         breakoutRank: seed.breakoutRank,
@@ -527,13 +490,11 @@ export interface CreateEventOptions {
   subtitle?: string;
   startingBudget?: number;
   minBid?: number;
+  /** Findings each panelist ends up holding. Defaults to 5. */
+  roundCount?: number;
   /** Include the 25 demo findings, pre-submitted and ready to auction. */
   demo?: boolean;
   panelistNames?: string[];
-  /** What each breakout room writes. Defaults to the five finding types. */
-  breakoutFraming?: Framing;
-  /** What a panelist's team is made of. Defaults to the strategic objectives. */
-  auctionFraming?: Framing;
 }
 
 export function createEvent(options: CreateEventOptions = {}): EventState {
@@ -541,12 +502,16 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
   const startingBudget = options.startingBudget ?? 100;
   const now = Date.now();
 
+  // Named panelists still inherit the default roles in seat order, so a fresh
+  // event always arrives with the five lenses filled in rather than blank.
   const panelists: Panelist[] = (
     options.panelistNames?.length
       ? options.panelistNames.map((name, i) => ({
           id: `pl-${i + 1}`,
           name,
           affiliation: "",
+          role: DEFAULT_ROLES[i % DEFAULT_ROLES.length].name,
+          rolePrompt: DEFAULT_ROLES[i % DEFAULT_ROLES.length].prompt,
           sortOrder: i,
         }))
       : PANELIST_BLUEPRINT
@@ -562,11 +527,12 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
         (demo ? "Rehearsal event — demo data" : "NYC Climate Week"),
       startingBudget,
       minBid: options.minBid ?? 1,
+      roundCount: options.roundCount ?? DEFAULT_ROUND_COUNT,
       currentRoundIndex: demo ? 0 : -1,
       displayMode: "board",
       status: demo ? "auction" : "setup",
-      breakoutFraming: options.breakoutFraming ?? "findings",
-      auctionFraming: options.auctionFraming ?? "objectives",
+      audienceOpen: false,
+      audienceBudget: 100,
       declareWinner: false,
       showSummary: false,
       enforceBudgetReserve: false,
@@ -576,8 +542,8 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
     breakouts: makeBreakouts(demo),
     findings: demo ? makeFindings(true) : [],
     panelists,
-    objectives: OBJECTIVE_BLUEPRINT.map((o) => ({ ...o })),
     transactions: [],
+    audience: [],
     timer: {
       endsAt: null,
       pausedRemainingMs: null,
@@ -589,32 +555,16 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
   };
 }
 
-/**
- * Blank cards for a breakout that is starting from scratch in the room.
- *
- * `plan` comes from `blankCardPlan()` in lib/derive.ts and is what makes this
- * framing-aware: one entry per finding type, or one per strategic objective.
- * It defaults to the five finding types so callers that predate the framings
- * (and the end-to-end test) keep working unchanged.
- */
-export function createBlankFindings(
-  breakoutId: string,
-  plan: { type: FindingType; objectiveId: string }[] = FINDING_TYPES.map((type) => ({
-    type,
-    objectiveId: "",
-  })),
-): Finding[] {
+/** Blank findings for a breakout that is starting from scratch in the room. */
+export function createBlankFindings(breakoutId: string): Finding[] {
   const now = Date.now();
-  return plan.map((entry, index) => ({
-    id: `fd-${breakoutId}-${entry.objectiveId || entry.type}-${now.toString(36)}${index}`,
+  return FINDING_TYPES.map((type, index) => ({
+    id: `fd-${breakoutId}-${type}-${now.toString(36)}${index}`,
     breakoutId,
-    type: entry.type,
-    objectiveId: entry.objectiveId,
+    type,
     headline: "",
     whatChanged: "",
     evidence: "",
-    risks: "",
-    opportunities: "",
     whyItMatters: "",
     confidence: "medium" as const,
     breakoutRank: index + 1,
