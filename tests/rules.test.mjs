@@ -4,11 +4,17 @@ import test from "node:test";
 
 import {
   allPanelistViews,
+  auctionSlots,
   availableFindings,
+  blankCardPlan,
+  breakoutCategories,
   buildSummary,
+  findingCategory,
+  lexicon,
   validateAward,
 } from "../src/lib/derive.ts";
-import { createEvent } from "../src/lib/seed.ts";
+import { createBlankFindings, createEvent } from "../src/lib/seed.ts";
+import { fromSnapshot, toSnapshot } from "../src/lib/serialize.ts";
 
 function demo() {
   return createEvent({ demo: true, startingBudget: 100 });
@@ -18,8 +24,13 @@ function firstAvailable(state, skip = 0) {
   return availableFindings(state)[skip].finding.id;
 }
 
-function award(state, { findingId, panelistId, objectiveId, price }) {
-  const validation = validateAward(state, { findingId, panelistId, objectiveId, price });
+/**
+ * Records an award the way the app does. `slotId` is an objective id under the
+ * default framing and a finding-type key when the auction is framed by
+ * findings — the rule engine treats both the same way.
+ */
+function award(state, { findingId, panelistId, slotId, price }) {
+  const validation = validateAward(state, { findingId, panelistId, slotId, price });
   assert.equal(
     validation.ok,
     true,
@@ -29,7 +40,7 @@ function award(state, { findingId, panelistId, objectiveId, price }) {
     id: `tx-${state.transactions.length + 1}`,
     findingId,
     panelistId,
-    objectiveId,
+    slotId,
     price,
     timestamp: Date.now(),
     note: "",
@@ -64,7 +75,7 @@ test("a valid award reduces the buyer's budget and removes the finding from the 
   const findingId = firstAvailable(state);
   const panelistId = state.panelists[0].id;
 
-  award(state, { findingId, panelistId, objectiveId: state.objectives[0].id, price: 18 });
+  award(state, { findingId, panelistId, slotId: state.objectives[0].id, price: 18 });
 
   const view = allPanelistViews(state).find((v) => v.panelist.id === panelistId);
   assert.equal(view.spent, 18);
@@ -84,14 +95,14 @@ test("a finding cannot be sold twice", () => {
   award(state, {
     findingId,
     panelistId: state.panelists[0].id,
-    objectiveId: state.objectives[0].id,
+    slotId: state.objectives[0].id,
     price: 10,
   });
 
   const second = validateAward(state, {
     findingId,
     panelistId: state.panelists[1].id,
-    objectiveId: state.objectives[1].id,
+    slotId: state.objectives[1].id,
     price: 12,
   });
 
@@ -102,14 +113,14 @@ test("a finding cannot be sold twice", () => {
 test("a panelist cannot buy two findings for the same objective", () => {
   const state = demo();
   const panelistId = state.panelists[0].id;
-  const objectiveId = state.objectives[0].id;
+  const slotId = state.objectives[0].id;
 
-  award(state, { findingId: firstAvailable(state), panelistId, objectiveId, price: 10 });
+  award(state, { findingId: firstAvailable(state), panelistId, slotId, price: 10 });
 
   const second = validateAward(state, {
     findingId: firstAvailable(state),
     panelistId,
-    objectiveId,
+    slotId,
     price: 5,
   });
 
@@ -124,14 +135,14 @@ test("a panelist cannot spend more credits than they hold", () => {
   award(state, {
     findingId: firstAvailable(state),
     panelistId,
-    objectiveId: state.objectives[0].id,
+    slotId: state.objectives[0].id,
     price: 95,
   });
 
   const overspend = validateAward(state, {
     findingId: firstAvailable(state),
     panelistId,
-    objectiveId: state.objectives[1].id,
+    slotId: state.objectives[1].id,
     price: 6, // only 5 remain
   });
 
@@ -146,7 +157,7 @@ test("bids below the minimum are rejected", () => {
   const tooLow = validateAward(state, {
     findingId: firstAvailable(state),
     panelistId: state.panelists[0].id,
-    objectiveId: state.objectives[0].id,
+    slotId: state.objectives[0].id,
     price: 4,
   });
 
@@ -162,7 +173,7 @@ test("the budget reserve is a warning by default and an error when enforced", ()
   const input = {
     findingId: firstAvailable(state),
     panelistId,
-    objectiveId: state.objectives[0].id,
+    slotId: state.objectives[0].id,
     price: 98,
   };
 
@@ -192,7 +203,7 @@ test("removing a transaction fully restores budget and availability (undo)", () 
   const findingId = firstAvailable(state);
   const panelistId = state.panelists[0].id;
 
-  award(state, { findingId, panelistId, objectiveId: state.objectives[0].id, price: 42 });
+  award(state, { findingId, panelistId, slotId: state.objectives[0].id, price: 42 });
   assert.equal(allPanelistViews(state)[0].remaining, 58);
 
   state.transactions.pop();
@@ -210,14 +221,14 @@ test("editing a transaction excludes itself from the double-sale and budget chec
   const findingId = firstAvailable(state);
   const panelistId = state.panelists[0].id;
 
-  award(state, { findingId, panelistId, objectiveId: state.objectives[0].id, price: 90 });
+  award(state, { findingId, panelistId, slotId: state.objectives[0].id, price: 90 });
   const txId = state.transactions[0].id;
 
   // Re-pricing the same sale must not trip "already sold" or "insufficient".
   const repriced = validateAward(state, {
     findingId,
     panelistId,
-    objectiveId: state.objectives[0].id,
+    slotId: state.objectives[0].id,
     price: 30,
     excludeTransactionId: txId,
   });
@@ -238,12 +249,12 @@ test("a full five-round auction fills every portfolio and summarises correctly",
     [11, 9, 19, 21, 13],
   ];
 
-  state.objectives.forEach((objective, round) => {
+  auctionSlots(state).forEach((slot, round) => {
     state.panelists.forEach((panelist, seat) => {
       award(state, {
         findingId: firstAvailable(state),
         panelistId: panelist.id,
-        objectiveId: objective.id,
+        slotId: slot.id,
         price: prices[seat][round],
       });
     });
@@ -262,7 +273,7 @@ test("a full five-round auction fills every portfolio and summarises correctly",
       "spend and remainder must reconcile to the starting budget",
     );
     assert.equal(
-      new Set(view.slots.map((s) => s.objective.id)).size,
+      new Set(view.slots.map((s) => s.slot.id)).size,
       5,
       "each slot must be a distinct objective",
     );
@@ -282,4 +293,147 @@ test("a full five-round auction fills every portfolio and summarises correctly",
     summary.breakoutRepresentation.reduce((sum, row) => sum + row.count, 0),
     20,
   );
+});
+
+// --- Session format ---------------------------------------------------------
+//
+// Two independent framings: what the rooms write, and what the panel's teams
+// are made of. The rule engine treats a slot as an opaque id, so the same
+// twelve rules above hold in every combination — these tests check that the
+// roster, the categories and the vocabulary follow the setting.
+
+test("the default framing is findings into objectives, exactly as before", () => {
+  const state = demo();
+  assert.equal(state.event.breakoutFraming, "findings");
+  assert.equal(state.event.auctionFraming, "objectives");
+
+  assert.deepEqual(
+    auctionSlots(state).map((s) => s.id),
+    state.objectives.sort((a, b) => a.roundOrder - b.roundOrder).map((o) => o.id),
+  );
+  assert.deepEqual(
+    breakoutCategories(state).map((c) => c.key),
+    ["momentum", "fragility", "bottleneck", "opportunity", "wildcard"],
+  );
+  assert.equal(lexicon(state).boardTitle, "Strategic Findings Board");
+});
+
+test("framing the breakouts by objective gives every room one card per objective", () => {
+  const state = createEvent({ breakoutFraming: "objectives", auctionFraming: "objectives" });
+  const objectives = [...state.objectives].sort((a, b) => a.roundOrder - b.roundOrder);
+
+  const plan = blankCardPlan(state);
+  assert.equal(plan.length, objectives.length);
+  assert.deepEqual(
+    plan.map((p) => p.objectiveId),
+    objectives.map((o) => o.id),
+  );
+
+  const cards = createBlankFindings("bk-grid", plan);
+  state.findings = cards;
+  assert.equal(cards.length, 5);
+  assert.deepEqual(
+    cards.map((c) => findingCategory(state, c).key),
+    objectives.map((o) => o.id),
+  );
+  // Every card carries both bodies; only the objective ones are filled in.
+  assert.ok(cards.every((c) => c.risks === "" && c.opportunities === ""));
+  assert.equal(lexicon(state).boardTitle, "Strategic Objectives Board");
+});
+
+test("framing the auction by findings makes the finding types the team slots", () => {
+  const state = demo();
+  state.event.auctionFraming = "findings";
+
+  assert.deepEqual(
+    auctionSlots(state).map((s) => s.id),
+    ["momentum", "fragility", "bottleneck", "opportunity", "wildcard"],
+  );
+  assert.equal(lexicon(state).Slot, "Finding type");
+
+  // A panelist's team is now five typed positions, and each still takes one card.
+  const panelistId = state.panelists[0].id;
+  award(state, { findingId: firstAvailable(state), panelistId, slotId: "momentum", price: 10 });
+
+  const view = allPanelistViews(state).find((v) => v.panelist.id === panelistId);
+  assert.equal(view.filledCount, 1);
+  assert.equal(view.slots[0].slot.id, "momentum");
+  assert.equal(view.slots[0].transaction.price, 10);
+
+  const refill = validateAward(state, {
+    findingId: firstAvailable(state),
+    panelistId,
+    slotId: "momentum",
+    price: 5,
+  });
+  assert.equal(refill.ok, false);
+  assert.ok(refill.errors.some((e) => e.code === "slot_filled"));
+});
+
+test("a mismatched category warns, but only when the two framings line up", () => {
+  const state = demo();
+  state.event.auctionFraming = "findings";
+
+  const momentum = availableFindings(state).find((v) => v.finding.type === "momentum");
+  const fragility = availableFindings(state).find((v) => v.finding.type === "fragility");
+
+  const wrongSlot = validateAward(state, {
+    findingId: momentum.finding.id,
+    panelistId: state.panelists[0].id,
+    slotId: "fragility",
+    price: 5,
+  });
+  assert.equal(wrongSlot.ok, true, "a mismatch is advisory, never a hard rule");
+  assert.ok(wrongSlot.warnings.some((w) => w.code === "category_mismatch"));
+
+  const rightSlot = validateAward(state, {
+    findingId: fragility.finding.id,
+    panelistId: state.panelists[0].id,
+    slotId: "fragility",
+    price: 5,
+  });
+  assert.ok(!rightSlot.warnings.some((w) => w.code === "category_mismatch"));
+
+  // Cross-cutting is the point when the rooms and the auction differ, so no
+  // warning is raised at all in the default findings-into-objectives setup.
+  const crossCutting = demo();
+  const anyFinding = availableFindings(crossCutting)[0];
+  const validation = validateAward(crossCutting, {
+    findingId: anyFinding.finding.id,
+    panelistId: crossCutting.panelists[0].id,
+    slotId: crossCutting.objectives[0].id,
+    price: 5,
+  });
+  assert.ok(!validation.warnings.some((w) => w.code === "category_mismatch"));
+});
+
+test("a schema 1 ledger still loads: objectiveId is read as slotId", () => {
+  const state = demo();
+  const objectiveId = state.objectives[0].id;
+  const snapshot = toSnapshot(state);
+
+  // Exactly what a pre-framing event held on disk.
+  snapshot.transactions = {
+    "tx-old": {
+      id: "tx-old",
+      findingId: state.findings[0].id,
+      panelistId: state.panelists[0].id,
+      objectiveId,
+      price: 12,
+      timestamp: 1,
+      note: "",
+    },
+  };
+  delete snapshot.event.breakoutFraming;
+  delete snapshot.event.auctionFraming;
+
+  const loaded = fromSnapshot(snapshot);
+  assert.equal(loaded.event.breakoutFraming, "findings");
+  assert.equal(loaded.event.auctionFraming, "objectives");
+  assert.equal(loaded.transactions[0].slotId, objectiveId);
+  assert.equal(loaded.transactions[0].objectiveId, undefined, "the dead field is dropped");
+
+  const view = allPanelistViews(loaded).find((v) => v.panelist.id === state.panelists[0].id);
+  assert.equal(view.spent, 12);
+  assert.equal(view.slots[0].transaction.price, 12, "the award still fills its objective");
 });

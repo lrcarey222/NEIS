@@ -12,6 +12,7 @@ import { LedgerPanel } from "@/components/control/LedgerPanel";
 import { SetupPanel } from "@/components/control/SetupPanel";
 import { patchEvent, patchTimer } from "@/lib/actions";
 import { findingsCsv, downloadCsv, portfoliosCsv, transactionsCsv } from "@/lib/csv";
+import { lexicon } from "@/lib/derive";
 import { isAdmin, useRole } from "@/lib/localAuth";
 import { useEvent } from "@/lib/useEvent";
 import type { DisplayMode, EventState } from "@/lib/types";
@@ -109,7 +110,7 @@ export default function ControlPage() {
           <Notice tone="warn">
             This event is loaded with <strong>sample findings</strong> for rehearsal. Before
             the live session, go to <strong>Setup → Event lifecycle</strong> and create a new
-            live event, or clear the findings.
+            live event, or clear the cards.
           </Notice>
         </div>
       ) : null}
@@ -142,7 +143,7 @@ export default function ControlPage() {
             className="btn btn-ghost"
             onClick={() => downloadCsv("neis-findings.csv", findingsCsv(state))}
           >
-            Findings CSV
+            {lexicon(state).ItemPlural} CSV
           </button>
           <button
             type="button"
@@ -250,7 +251,7 @@ function DisplayControls({ state }: { state: EventState }) {
   // Chronological order — Instructions is the screen the room sees first.
   const modes: { key: DisplayMode; label: string }[] = [
     { key: "instructions", label: "Instructions" },
-    { key: "board", label: "Findings Board" },
+    { key: "board", label: lexicon(state).boardTitle },
     { key: "auction", label: "Live Auction" },
     { key: "portfolios", label: "Final Portfolios" },
   ];

@@ -4,11 +4,15 @@
 
 A live-event web app for the NEIS session at NYC Climate Week.
 
-Five breakout groups each record five Strategic Findings **at the same time, from their own
-laptops**. Every finding lands on a shared board the moment it is submitted. A final panel then
-bids fictional investment credits to acquire one finding for each of five strategic objectives.
-The bidding happens **verbally in the room** — this app captures the findings, projects the
-board, and lets an operator record each result so every screen updates instantly.
+Five breakout groups each fill in a set of cards **at the same time, from their own laptops**.
+Every card lands on a shared board the moment it is submitted. A final panel then bids fictional
+investment credits to assemble a team of them. The bidding happens **verbally in the room** —
+this app captures what the rooms write, projects the board, and lets an operator record each
+result so every screen updates instantly.
+
+The session runs in one of two formats, chosen in Setup — see
+[Session format](#session-format). By default the rooms record five **Strategic Findings** each
+and the panel buys one for every **Strategic Objective**.
 
 Everything is set up and running. Firebase is connected, the site is deployed, and all screens
 sync live across devices.
@@ -32,6 +36,9 @@ sync live across devices.
 
 **Configure the event** — `/control/` → **Setup**:
 
+- **Session format** — Strategic Findings or Strategic Objectives, for the breakouts and for
+  the auction. Set this first; everything below reads differently depending on it. See
+  [Session format](#session-format).
 - Event title and subtitle (shown across the top of the big screen)
 - The real **panelist names** and starting budget (default 100 credits)
 - The five **strategic objectives**, their moderator prompts, and the round order
@@ -41,7 +48,8 @@ sync live across devices.
 
 1. Type `RESET` in the confirmation box
 2. **New live event (empty)** — clears the rehearsal data
-3. **Seed empty finding templates** — gives every room its five blank cards
+3. **Seed empty finding templates** — gives every room its blank cards, one per category in
+   whichever format you chose
 
 **Set up the room:**
 
@@ -52,8 +60,9 @@ sync live across devices.
 ## 1a. Briefing the room
 
 The **Instructions** screen is the projected briefing: a QR code and PIN for every
-breakout, the five finding types, what submitting does, and the five objectives the panel will
-bid against. Leave it up while people find their tables and while the moderator explains the
+breakout, the roster each room has to fill, what submitting does, and the slots the panel will
+bid for. It follows the [session format](#session-format), so it always briefs the exercise you
+are actually running. Leave it up while people find their tables and while the moderator explains the
 exercise — it is the fastest way to fix the room that has not found its link.
 
 It reads the live event, so renamed breakouts and edited PINs appear on it immediately, and the
@@ -65,11 +74,12 @@ QR codes carry `?event=rehearsal` through when the projector is on the rehearsal
 
 ## 2. During the breakouts
 
-Set the big screen to **Findings Board**. Start the countdown from the control bar if you want
+Set the big screen to the **board** (labelled Strategic Findings Board or Strategic Objectives
+Board, following the format). Start the countdown from the control bar if you want
 it visible in the rooms.
 
 The **Breakouts** tab is your live view of all five rooms at once: submission status, how many
-findings each has written, and a green **N ONLINE** badge showing how many devices actually have
+cards each has written, and a green **N ONLINE** badge showing how many devices actually have
 that room's page open.
 
 > **If a room shows *Not started* and *0 online*, they have not found the link.** That is the
@@ -83,18 +93,18 @@ Facilitators cannot reopen their own room once submitted; that is deliberately y
 
 Switch the big screen to **Live Auction**. On the **Auction** tab:
 
-1. The **objective** is pre-selected from the current round
-2. Filter and click the **finding** the room just bid on
+1. The **slot** — an objective, or a finding type — is pre-selected from the current round
+2. Filter and click the **card** the room just bid on
 3. Click the winning **panelist** — each button shows their remaining credits
 4. Type the **winning bid** — validation updates as you type
-5. **AWARD FINDING** → confirm the summary sentence → done
+5. **AWARD** → confirm the summary sentence → done
 
 Every screen updates within a few hundred milliseconds. *Advance to the next round after
 awarding* is on by default; turn it off if several panelists buy within one round.
 
 **UNDO LAST TRANSACTION** is at the top of the **Ledger** tab. Mis-hearing a bid in a loud room
 is the likeliest failure mode of the whole exercise, so undo is one click plus a confirm, and it
-fully restores the budget and returns the finding to the pool. Any earlier transaction can also
+fully restores the budget and returns the card to the pool. Any earlier transaction can also
 be edited in place or deleted.
 
 ## 4. Closing
@@ -102,27 +112,60 @@ be edited in place or deleted.
 Switch to **Final Portfolios**. This mode is **two screens**, and a *Show summary cuts →* button
 appears next to the mode buttons to flip between them:
 
-1. **The roster** — every panelist's five slots with source breakout, finding type and price,
+1. **The roster** — every panelist's slots with source breakout, card category and price,
    plus total spent, credits remaining, and their breakout spread
-2. **The summary cuts** — findings submitted and acquired, credits committed, average price,
-   then highest-valued findings, most-represented breakouts, and what went undrafted
+2. **The summary cuts** — cards submitted and acquired, credits committed, average price,
+   then highest-valued cards, most-represented breakouts, and what went undrafted
 
 They are separate screens rather than one split view because four portfolios plus three summary
 panels cannot both stay legible from the back of a room at 16:9. No winner is declared unless
 you enable it in Setup.
 
-**Export** from the toolbar on `/control/`: **Findings CSV**, **Ledger CSV**, **Portfolios CSV**,
+**Export** from the toolbar on `/control/`: **Findings/Objectives CSV**, **Ledger CSV**, **Portfolios CSV**,
 and a **Printable summary** page (browser → Print → Save as PDF).
+
+---
+
+# Session format
+
+`/control/` → **Setup** → **Session format**. Two independent choices, both set before the rooms
+start writing:
+
+| | Strategic Findings | Strategic Objectives |
+| --- | --- | --- |
+| **Breakout sessions produce** | Five cards per room, one of each type — Momentum, Fragility, Bottleneck, Underappreciated Opportunity, Wildcard — each with a headline, what changed, evidence, why it matters | One card per strategic objective, each with a headline, the **risks** and the **opportunities** that room sees against it, and why it matters |
+| **The panel bids to fill a team of** | One slot per finding type; each round contests one type, in the fixed order Momentum → Wildcard | One slot per strategic objective; each round contests one objective, in the order set in Setup |
+
+The default is **Findings** for the breakouts and **Objectives** for the auction — the original
+exercise, unchanged. Matching them (both Findings, or both Objectives) is the other natural
+choice: when they match, the operator gets a warning if a card is bought for a slot it does not
+belong to. That warning is advisory, because a moderator may legitimately run a cross-cutting
+round.
+
+Everything downstream follows: the board heading, the card chips, the round banner, the
+portfolio slots, the printable summary and the CSV column headers.
+
+**Switching format after the rooms are seeded** leaves the wrong cards in place — five typed
+findings where each room now needs one card per objective, or vice versa. Setup flags this and
+Event lifecycle → **Rebuild breakout cards** fixes it (destructive; requires typing `RESET`).
+The auction format **locks once the first award is recorded**, because every transaction points
+at a slot in the current format; reset the auction to change it.
 
 ---
 
 # For breakout facilitators
 
-Open your room's link and enter the PIN from your table card. Five cards are already there, one
-per finding type — Momentum, Fragility, Bottleneck, Underappreciated Opportunity, Wildcard.
+Open your room's link and enter the PIN from your table card. The cards are already there — the
+top of the page says what your room is being asked for, and each card is labelled with its
+category.
 
-Each takes a headline, what changed, evidence (one point per line), why it matters, confidence,
-and an optional dissenting view.
+Under **Strategic Findings** there are five, one per type (Momentum, Fragility, Bottleneck,
+Underappreciated Opportunity, Wildcard), and each takes a headline, what changed, evidence (one
+point per line), why it matters, confidence, and an optional dissenting view.
+
+Under **Strategic Objectives** there is one card per objective, and each takes a headline, the
+**risks** and the **opportunities** you see against it (one per line), why it matters,
+confidence, and an optional dissenting view.
 
 - **Everything saves automatically when you leave a field.** There is no save button to forget.
 - The **↑/↓** buttons set your group's 1–5 ranking.
@@ -144,10 +187,11 @@ because they act on **everyone** — including a breakout room mid-sentence.
 
 | Action | Effect |
 | --- | --- |
-| **Seed empty finding templates** | Gives every room its five blank cards. Skips rooms that already have findings. |
+| **Seed empty templates** | Gives every room its blank cards, one per category in the current [session format](#session-format). Skips rooms that already have cards. |
 | **Submit all breakouts** | Publishes everything currently written. Handy mid-rehearsal. |
-| **Reset the auction** | Clears all transactions, returns to Round 0, **keeps every finding**. Use this between the rehearsal auction and the real one. |
-| **Clear all findings** | Removes findings and transactions, keeps panelists, objectives and settings. |
+| **Reset the auction** | Clears all transactions, returns to Round 0, **keeps every card**. Use this between the rehearsal auction and the real one. Also what unlocks the auction format. |
+| **Rebuild breakout cards** | Throws away every card and re-seeds blanks matching the session format. Use after switching the breakout format. Refused once anything has been sold. |
+| **Clear all cards** | Removes cards and transactions, keeps panelists, objectives and settings. |
 | **New demo event** | Wipes everything and reloads the 25 sample findings. For rehearsal. |
 | **New live event** | Wipes everything and starts empty. **Use this before the real session.** |
 
@@ -201,8 +245,8 @@ rule applied.
 **Hard rules, never overridable:**
 
 - A panelist cannot spend more credits than they hold
-- A panelist cannot buy more than one finding for the same objective
-- A finding cannot be sold twice
+- A panelist cannot fill the same team slot twice
+- A card cannot be sold twice
 - Bids must be whole numbers, at or above the minimum bid
 
 **Advisory by default:**
@@ -211,6 +255,11 @@ rule applied.
   their remaining slots at the minimum bid. A bid that breaks that shows a warning but is
   allowed — a moderator may legitimately let someone go all-in. Setup → *Block bids that break
   the budget reserve* promotes it to a hard rule.
+- **Category mismatch.** Only when the breakouts and the auction use the same
+  [session format](#session-format): a Fragility card bought for the Momentum slot, or a
+  National Security card bought for the Political Durability slot, is flagged. Advisory
+  permanently — running a cross-cutting round is a legitimate choice.
+- **Not yet submitted.** Awarding a card its room has not published yet.
 
 Minimum bid defaults to 1 credit and is configurable in Setup.
 
@@ -237,8 +286,8 @@ default `".read": "now < ..."` timestamp rule.
 Check the PIN in `/control/` → Setup → Breakouts. The admin PIN opens every room, so you can
 always take over from the control laptop.
 
-**A finding is wrong after it was sold.**
-Ledger tab → **Edit** on that transaction. You can change panelist, objective and price in place,
+**A card is wrong after it was sold.**
+Ledger tab → **Edit** on that transaction. You can change panelist, slot and price in place,
 or delete it entirely.
 
 ---
@@ -253,7 +302,7 @@ into `out/`, which GitHub Pages serves. Nothing can crash mid-session because no
 
 ```
 src/lib/types.ts            Domain model
-src/lib/derive.ts           Pure selectors + every auction rule
+src/lib/derive.ts           Pure selectors, the session formats, every auction rule
 src/lib/seed.ts             Event scaffolding + the 25 demo findings
 src/lib/firebase-config.ts  Firebase project values
 src/lib/net.ts              Transport: Firebase adapter | local fallback
@@ -266,7 +315,7 @@ tests/                      Rule tests + live end-to-end walkthrough
 
 Three decisions carry most of the weight:
 
-**The transaction log is the only source of truth for the auction.** A `Finding` never stores who
+**The transaction log is the only source of truth for the auction.** A card never stores who
 bought it or for how much — budgets, availability and portfolios are all derived from
 `transactions`. Undo is therefore a one-row delete that cannot leave the scoreboard half-updated
 in front of a room.
@@ -278,7 +327,7 @@ other. The end-to-end test fires all five rooms' writes at once and asserts noth
 
 **Awards go through a database transaction.** `awardFinding` re-runs the full validation *inside*
 an RTDB transaction, against committed state rather than whatever this browser happened to be
-rendering. Two operators clicking AWARD on the same finding cannot both succeed.
+rendering. Two operators clicking AWARD on the same card cannot both succeed.
 
 There is one adapter boundary: when the Firebase config is unfilled, or the URL carries
 `?local=1`, `net()` returns a localStorage + BroadcastChannel adapter with an identical
@@ -378,19 +427,20 @@ in `/control/` → Setup, so you can change them on the day.
 npm test
 ```
 
-11 unit tests over the rule engine: budget arithmetic, double-sale and double-slot rejection,
+16 unit tests over the rule engine: budget arithmetic, double-sale and double-slot rejection,
 minimum bid, the reserve rule in both modes, undo restoring state exactly, editing a transaction
-excluding itself from its own checks, and a full four-panelist five-round auction reconciling to
-correct totals. Pure — no network.
+excluding itself from its own checks, a full four-panelist five-round auction reconciling to
+correct totals, all four [session formats](#session-format) producing the right roster and
+categories, and a schema 1 event still loading. Pure — no network.
 
 ```bash
 node --import ./tests/ts-resolver.mjs tests/e2e.mjs https://neis-climate-week-default-rtdb.firebaseio.com
 ```
 
-42 checks against live Firebase: event round-trip, keyed-not-array storage, seeding all five
-rooms, **five rooms writing simultaneously with nothing lost**, submit and reopen, twenty awards
-across five rounds, rule enforcement against live data, undo, and resetting the auction while
-keeping findings.
+Checks against live Firebase: event round-trip, keyed-not-array storage, seeding all five rooms,
+**five rooms writing simultaneously with nothing lost**, submit and reopen, twenty awards across
+five rounds, rule enforcement against live data, undo, resetting the auction while keeping
+cards, and switching the session format then re-seeding and writing against the new roster.
 
 It works under `neis/events/__e2e` and deletes that node when it finishes, so it is safe to run
 against the event database — but run it *before* the session, not during.
@@ -417,8 +467,8 @@ segment so a `".write": "auth.uid === $uid"` rule can be added without touching 
 
 - The connection indicator on every screen reads **Live** on Firebase, **Local only** in red when
   this browser is not syncing, and **No event** before one is created.
-- `/display/` shortcuts: **1** Findings Board, **2** Live Auction, **3** Final Portfolios,
+- `/display/` shortcuts: **1** the board, **2** Live Auction, **3** Final Portfolios,
   **4** Instructions, **F** fullscreen. These are a local override in case the operator's machine drops off the
   network; the badge in the header says so, and the next change from `/control/` takes back over.
-- Colour is never the only signal. Every finding type shows its glyph and full name, and
-  confidence shows both bars and text.
+- Colour is never the only signal. Every card category — finding type or objective — shows its
+  glyph and full name, and confidence shows both bars and text.

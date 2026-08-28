@@ -3,13 +3,15 @@
 import {
   allPanelistViews,
   buildSummary,
+  findingCategory,
   findingsForBreakout,
+  lexicon,
   sortedBreakouts,
   transactionForFinding,
 } from "@/lib/derive";
 import { Logo } from "@/components/Logo";
 import { useEvent } from "@/lib/useEvent";
-import { CONFIDENCE_META, FINDING_TYPE_META } from "@/lib/types";
+import { CONFIDENCE_META } from "@/lib/types";
 
 /**
  * Print-oriented record of the whole session.
@@ -31,6 +33,7 @@ export default function SummaryPage() {
     );
   }
 
+  const words = lexicon(state);
   const panelists = allPanelistViews(state);
   const summary = buildSummary(state);
   const breakouts = sortedBreakouts(state);
@@ -61,8 +64,9 @@ export default function SummaryPage() {
         </p>
         <h1 className="mt-1 text-3xl leading-tight font-bold">{state.event.title}</h1>
         <p className="mt-2 text-sm text-[#555]">
-          {summary.submittedFindings} findings submitted · {summary.draftedFindings} acquired ·{" "}
-          {summary.totalSpent} of {summary.totalBudget} credits committed
+          {summary.submittedFindings} {words.itemPlural} submitted ·{" "}
+          {summary.draftedFindings} acquired · {summary.totalSpent} of{" "}
+          {summary.totalBudget} credits committed
         </p>
       </header>
 
@@ -91,18 +95,18 @@ export default function SummaryPage() {
 
               <table className="w-full border-collapse text-sm">
                 <tbody>
-                  {view.slots.map((slot) => (
-                    <tr key={slot.objective.id} className="border-t border-[#e5e5e5]">
+                  {view.slots.map((entry) => (
+                    <tr key={entry.slot.id} className="border-t border-[#e5e5e5]">
                       <td className="w-48 py-1.5 pr-3 align-top font-mono text-[0.625rem] tracking-wide text-[#666] uppercase">
-                        {slot.objective.name}
+                        {entry.slot.name}
                       </td>
                       <td className="py-1.5 pr-3 align-top">
-                        {slot.finding ? (
+                        {entry.finding ? (
                           <>
-                            <span className="font-medium">{slot.finding.headline}</span>
+                            <span className="font-medium">{entry.finding.headline}</span>
                             <span className="block text-xs text-[#666]">
-                              {slot.breakout?.name} ·{" "}
-                              {FINDING_TYPE_META[slot.finding.type].label}
+                              {entry.breakout?.name} ·{" "}
+                              {findingCategory(state, entry.finding).label}
                             </span>
                           </>
                         ) : (
@@ -110,7 +114,7 @@ export default function SummaryPage() {
                         )}
                       </td>
                       <td className="w-16 py-1.5 text-right align-top font-mono font-bold">
-                        {slot.transaction?.price ?? "—"}
+                        {entry.transaction?.price ?? "—"}
                       </td>
                     </tr>
                   ))}
@@ -124,7 +128,7 @@ export default function SummaryPage() {
       {/* Highest valued */}
       <section className="mb-10 break-inside-avoid">
         <h2 className="mb-3 border-b border-[#ccc] pb-1 text-lg font-bold">
-          Highest-valued findings
+          Highest-valued {words.itemPlural}
         </h2>
         {summary.highestValued.length === 0 ? (
           <p className="text-sm text-[#666]">Nothing was sold.</p>
@@ -138,7 +142,7 @@ export default function SummaryPage() {
                 <span className="flex-1">
                   <span className="font-medium">{view.finding.headline}</span>
                   <span className="block text-xs text-[#666]">
-                    {view.breakout?.name} · {view.panelist?.name} · {view.objective?.name}
+                    {view.breakout?.name} · {view.panelist?.name} · {view.slot?.name}
                   </span>
                 </span>
                 <span className="w-12 shrink-0 text-right font-mono font-bold">
@@ -159,7 +163,7 @@ export default function SummaryPage() {
           <thead>
             <tr className="border-b border-[#ccc] text-left font-mono text-[0.625rem] tracking-wide text-[#666] uppercase">
               <th className="py-1.5">Breakout</th>
-              <th className="py-1.5 text-right">Findings drafted</th>
+              <th className="py-1.5 text-right">{words.ItemPlural} drafted</th>
               <th className="py-1.5 text-right">Credits</th>
             </tr>
           </thead>
@@ -178,7 +182,7 @@ export default function SummaryPage() {
       {/* Full findings record */}
       <section>
         <h2 className="mb-4 border-b border-[#ccc] pb-1 text-lg font-bold">
-          All strategic findings
+          All {words.itemFullPlural.toLowerCase()}
         </h2>
         {breakouts.map((breakout) => {
           const findings = findingsForBreakout(state, breakout.id).filter((f) => f.submitted);
@@ -197,8 +201,8 @@ export default function SummaryPage() {
                   return (
                     <li key={finding.id} className="border-l-2 border-[#ddd] pl-3 text-sm">
                       <p className="font-mono text-[0.625rem] tracking-wide text-[#666] uppercase">
-                        {FINDING_TYPE_META[finding.type].label} · rank {finding.breakoutRank} ·{" "}
-                        {CONFIDENCE_META[finding.confidence].short} confidence
+                        {findingCategory(state, finding).label} · rank {finding.breakoutRank}{" "}
+                        · {CONFIDENCE_META[finding.confidence].short} confidence
                         {transaction
                           ? ` · sold to ${buyer?.name} for ${transaction.price}`
                           : " · undrafted"}
@@ -209,6 +213,16 @@ export default function SummaryPage() {
                       ) : null}
                       {finding.evidence ? (
                         <p className="mt-1 whitespace-pre-line text-[#555]">{finding.evidence}</p>
+                      ) : null}
+                      {finding.risks ? (
+                        <p className="mt-1 whitespace-pre-line text-[#333]">
+                          <em>Risks:</em> {finding.risks}
+                        </p>
+                      ) : null}
+                      {finding.opportunities ? (
+                        <p className="mt-1 whitespace-pre-line text-[#333]">
+                          <em>Opportunities:</em> {finding.opportunities}
+                        </p>
                       ) : null}
                       {finding.whyItMatters ? (
                         <p className="mt-1 text-[#333]">

@@ -127,16 +127,22 @@ body {
   margin-bottom: 0.75rem;
 }
 
-/* --- Finding type accents ------------------------------------------------- */
-/* Colour is always paired with the type label and glyph in the markup, so the
-   board stays readable for colour-blind viewers and on badly calibrated
-   projectors. These classes only add emphasis, never information. */
+/* --- Category accents ------------------------------------------------------ */
+/* Colour is always paired with the category label and glyph in the markup, so
+   the board stays readable for colour-blind viewers and on badly calibrated
+   projectors. These classes only add emphasis, never information.
 
-[data-type="momentum"] { --accent: var(--type-momentum); }
-[data-type="fragility"] { --accent: var(--type-fragility); }
-[data-type="bottleneck"] { --accent: var(--type-bottleneck); }
-[data-type="opportunity"] { --accent: var(--type-opportunity); }
-[data-type="wildcard"] { --accent: var(--type-wildcard); }
+   Addressed by accent *slot* rather than by finding type, because a card is
+   categorised by its finding type under one framing and by its strategic
+   objective under the other. lib/derive.ts assigns the slot; the five colours
+   below are all the markup ever needs to know. `data-type` is kept for the
+   fixed finding-type roster on the Instructions screen. */
+
+[data-accent="a"], [data-type="momentum"] { --accent: var(--type-momentum); }
+[data-accent="b"], [data-type="fragility"] { --accent: var(--type-fragility); }
+[data-accent="c"], [data-type="bottleneck"] { --accent: var(--type-bottleneck); }
+[data-accent="d"], [data-type="opportunity"] { --accent: var(--type-opportunity); }
+[data-accent="e"], [data-type="wildcard"] { --accent: var(--type-wildcard); }
 
 .type-bar {
   box-shadow: inset 3px 0 0 0 var(--accent, var(--color-paper-faint));

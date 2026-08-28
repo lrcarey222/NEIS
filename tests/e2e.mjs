@@ -15,7 +15,7 @@
 
 import assert from "node:assert/strict";
 
-import { validateAward } from "../src/lib/derive.ts";
+import { auctionSlots, blankCardPlan, validateAward } from "../src/lib/derive.ts";
 import { createBlankFindings, createEvent } from "../src/lib/seed.ts";
 import { fromSnapshot, toSnapshot } from "../src/lib/serialize.ts";
 
@@ -91,6 +91,12 @@ try {
     check("5 objectives", state.objectives.length === 5);
     check("4 panelists at 100 credits", state.panelists.every((p) => p.startingBudget === 100));
     check("no findings yet", state.findings.length === 0);
+    check(
+      "the session format round-trips",
+      state.event.breakoutFraming === "findings" &&
+        state.event.auctionFraming === "objectives",
+      `${state.event.breakoutFraming} / ${state.event.auctionFraming}`,
+    );
     check(
       "collections are stored keyed by id, not as arrays",
       !Array.isArray((await get("/breakouts")) ?? {}),
@@ -238,7 +244,7 @@ try {
         const validation = validateAward(state, {
           findingId,
           panelistId: panelist.id,
-          objectiveId: objective.id,
+          slotId: objective.id,
           price: prices[seat][round],
         });
         if (!validation.ok) {
@@ -251,7 +257,7 @@ try {
           id,
           findingId,
           panelistId: panelist.id,
-          objectiveId: objective.id,
+          slotId: objective.id,
           price: prices[seat][round],
           timestamp: Date.now(),
           note: "",
@@ -275,7 +281,7 @@ try {
       );
       check(
         `${panelist.name} filled five distinct objectives`,
-        new Set(mine.map((t) => t.objectiveId)).size === 5,
+        new Set(mine.map((t) => t.slotId)).size === 5,
       );
     });
     check("5 findings remain undrafted", 25 - final.transactions.length === 5);
@@ -292,7 +298,7 @@ try {
     const doubleSale = validateAward(state, {
       findingId: sold.findingId,
       panelistId: state.panelists[1].id,
-      objectiveId: state.objectives[1].id,
+      slotId: state.objectives[1].id,
       price: 5,
     });
     check("a sold finding cannot be sold again", !doubleSale.ok);
@@ -300,7 +306,7 @@ try {
     const doubleSlot = validateAward(state, {
       findingId: free.id,
       panelistId: sold.panelistId,
-      objectiveId: sold.objectiveId,
+      slotId: sold.slotId,
       price: 1,
     });
     check("a panelist cannot refill an objective", !doubleSlot.ok);
@@ -308,7 +314,7 @@ try {
     const broke = validateAward(state, {
       findingId: free.id,
       panelistId: state.panelists[0].id,
-      objectiveId: state.objectives[0].id,
+      slotId: state.objectives[0].id,
       price: 9999,
     });
     check("a panelist cannot overspend", !broke.ok);
@@ -352,6 +358,84 @@ try {
     check("transactions cleared", state.transactions.length === 0);
     check("all 25 findings survive", state.findings.filter((f) => f.submitted).length === 25);
     check("round returns to standby", state.event.currentRoundIndex === -1);
+  }
+
+  step("10. Switch the session format to objectives and re-seed");
+  {
+    // What /control does: change the framing, then Rebuild breakout cards.
+    await patch("/event", { breakoutFraming: "objectives", auctionFraming: "objectives" });
+
+    let state = await readState();
+    const plan = blankCardPlan(state);
+    check("the plan is one card per objective", plan.length === state.objectives.length);
+
+    const replacement = {};
+    for (const breakout of state.breakouts) {
+      for (const finding of createBlankFindings(breakout.id, plan)) {
+        replacement[finding.id] = finding;
+      }
+    }
+    await put("/findings", replacement);
+
+    state = await readState();
+    check("25 objective cards exist", state.findings.length === 25, `got ${state.findings.length}`);
+    for (const breakout of state.breakouts) {
+      const mine = state.findings.filter((f) => f.breakoutId === breakout.id);
+      check(
+        `${breakout.slug} covers every objective exactly once`,
+        new Set(mine.map((f) => f.objectiveId)).size === state.objectives.length,
+      );
+    }
+
+    // The rooms now write risks and opportunities instead of what-changed and
+    // evidence, and both still commit one field at a time.
+    const first = state.findings[0];
+    await Promise.all([
+      put(`/findings/${first.id}/risks`, "• Permitting timelines slip"),
+      put(`/findings/${first.id}/opportunities`, "• Reuse of existing rights of way"),
+      put(`/findings/${first.id}/headline`, "The objective is reachable but not on this schedule."),
+    ]);
+
+    state = await readState();
+    const written = state.findings.find((f) => f.id === first.id);
+    check(
+      "risks and opportunities both landed",
+      Boolean(written.risks && written.opportunities && written.headline),
+    );
+
+    check(
+      "the auction slots are the objectives",
+      auctionSlots(state).length === state.objectives.length,
+    );
+  }
+
+  step("11. Switch the auction to finding types");
+  {
+    await patch("/event", { auctionFraming: "findings", currentRoundIndex: -1 });
+    const state = await readState();
+    check(
+      "the slots become the five finding types",
+      auctionSlots(state)
+        .map((s) => s.id)
+        .join(",") === "momentum,fragility,bottleneck,opportunity,wildcard",
+    );
+
+    // The rule engine does not care which kind of slot it is handed.
+    const finding = state.findings.find((f) => f.type === "momentum");
+    await patch(`/findings/${finding.id}`, { submitted: true });
+
+    const live = await readState();
+    const validation = validateAward(live, {
+      findingId: finding.id,
+      panelistId: live.panelists[0].id,
+      slotId: "momentum",
+      price: 10,
+    });
+    check(
+      "a finding-type slot validates like an objective slot",
+      validation.ok,
+      validation.errors.map((e) => e.message).join("; "),
+    );
   }
 } catch (error) {
   failed++;

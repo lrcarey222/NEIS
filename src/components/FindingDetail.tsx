@@ -3,22 +3,30 @@
 import { useEffect, useRef } from "react";
 
 import type { FindingView } from "@/lib/derive";
-import { CONFIDENCE_META, FINDING_TYPE_META } from "@/lib/types";
-import { ConfidenceTag, EvidenceBlock, RankTag, TypeChip } from "./primitives";
+import { CONFIDENCE_META } from "@/lib/types";
+import { CategoryChip, ConfidenceTag, EvidenceBlock, RankTag } from "./primitives";
 
 /**
- * Side panel shown when a finding is clicked anywhere in the app.
+ * Side panel shown when a card is clicked anywhere in the app.
  *
  * Its real job happens live: a panelist asks "wait, what was that one again?"
  * and the moderator needs the full text on screen within a second. So it opens
  * over whatever is behind it, closes on Escape or a click outside, and puts
- * the purchase record at the top when the finding has already been sold.
+ * the purchase record at the top when the card has already been sold.
+ *
+ * Body sections render on presence rather than on the framing, so a card
+ * written as a finding (what changed / evidence) and one written against an
+ * objective (risks / opportunities) both display correctly — including a room
+ * that was mid-session when the format was switched.
  */
 export function FindingDetail({
   view,
+  slotLabel = "Objective",
   onClose,
 }: {
   view: FindingView | null;
+  /** What a team position is called under the current auction framing. */
+  slotLabel?: string;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -37,14 +45,13 @@ export function FindingDetail({
 
   if (!view) return null;
 
-  const { finding, breakout, panelist, objective, transaction, isDrafted } = view;
-  const meta = FINDING_TYPE_META[finding.type];
+  const { finding, breakout, category, panelist, slot, transaction, isDrafted } = view;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
       <button
         type="button"
-        aria-label="Close finding detail"
+        aria-label="Close card detail"
         onClick={onClose}
         className="bg-ink-900/75 absolute inset-0 backdrop-blur-[2px]"
       />
@@ -52,13 +59,13 @@ export function FindingDetail({
       <div
         ref={panelRef}
         tabIndex={-1}
-        data-type={finding.type}
+        data-accent={category.accent}
         className="bg-ink-850 border-ink-500 animate-rise relative flex h-full w-full max-w-2xl flex-col border-l shadow-2xl outline-none"
       >
         <header className="border-ink-500 type-bar flex items-start justify-between gap-4 border-b p-6">
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <TypeChip type={finding.type} size="md" />
+              <CategoryChip category={category} size="md" full />
               {breakout ? (
                 <span className="text-paper-mute border-ink-400 rounded-sm border px-2 py-0.5 font-mono text-[0.6875rem] font-semibold tracking-[0.1em] uppercase">
                   {breakout.shortName}
@@ -66,9 +73,9 @@ export function FindingDetail({
               ) : null}
             </div>
             <h2 className="text-paper text-2xl leading-tight font-semibold text-balance">
-              {finding.headline || "Untitled finding"}
+              {finding.headline || "Untitled card"}
             </h2>
-            <p className="text-paper-faint mt-2 text-xs">{meta.blurb}</p>
+            <p className="text-paper-faint mt-2 text-xs">{category.blurb}</p>
           </div>
 
           <button
@@ -96,10 +103,10 @@ export function FindingDetail({
                 </div>
                 <div>
                   <dt className="text-paper-faint text-[0.6875rem] tracking-wide uppercase">
-                    Objective
+                    {slotLabel}
                   </dt>
                   <dd className="text-paper mt-1 text-base font-semibold">
-                    {objective?.name ?? "—"}
+                    {slot?.name ?? "—"}
                   </dd>
                 </div>
                 <div>
@@ -143,6 +150,24 @@ export function FindingDetail({
               <Row label="Evidence">
                 <EvidenceBlock
                   text={finding.evidence}
+                  className="text-paper-dim text-sm leading-relaxed"
+                />
+              </Row>
+            ) : null}
+
+            {finding.risks ? (
+              <Row label="Risks">
+                <EvidenceBlock
+                  text={finding.risks}
+                  className="text-paper-dim text-sm leading-relaxed"
+                />
+              </Row>
+            ) : null}
+
+            {finding.opportunities ? (
+              <Row label="Opportunities">
+                <EvidenceBlock
+                  text={finding.opportunities}
                   className="text-paper-dim text-sm leading-relaxed"
                 />
               </Row>

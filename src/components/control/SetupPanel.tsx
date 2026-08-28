@@ -14,16 +14,24 @@ import {
   patchEvent,
   patchObjective,
   patchPanelist,
+  rebuildBreakoutCards,
   reorderObjectives,
   resetAuction,
   seedBlankFindings,
+  setFraming,
   submitAllBreakouts,
   type Result,
 } from "@/lib/actions";
-import { sortedBreakouts, sortedObjectives, sortedPanelists } from "@/lib/derive";
+import {
+  blankCardPlan,
+  lexicon,
+  sortedBreakouts,
+  sortedObjectives,
+  sortedPanelists,
+} from "@/lib/derive";
 import { adminPin } from "@/lib/localAuth";
 import { currentMode } from "@/lib/net";
-import type { EventState } from "@/lib/types";
+import type { EventState, Framing } from "@/lib/types";
 
 /** Pre-event configuration, plus the reset/demo tools used for rehearsal. */
 export function SetupPanel({ state }: { state: EventState }) {
@@ -36,6 +44,7 @@ export function SetupPanel({ state }: { state: EventState }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <ConnectionCard />
+      <FormatSettings state={state} notify={notify} />
       <EventSettings state={state} notify={notify} />
       <PanelistSettings state={state} notify={notify} />
       <ObjectiveSettings state={state} notify={notify} />
@@ -131,6 +140,169 @@ function LiveField({
       />
       {hint ? <p className="text-paper-faint mt-1 text-[0.6875rem]">{hint}</p> : null}
     </div>
+  );
+}
+
+/**
+ * The shape of the whole exercise: what the rooms write, and what the panel
+ * builds. First card after Sync because everything below it — the objectives,
+ * the seeded cards, the auction rounds — reads differently depending on it.
+ */
+function FormatSettings({ state, notify }: { state: EventState; notify: Notify }) {
+  const { breakoutFraming, auctionFraming } = state.event;
+  const auctionLocked = state.transactions.length > 0;
+  const objectives = sortedObjectives(state);
+
+  // Cards seeded under the other framing carry the wrong roster: five typed
+  // findings where the room now needs one card per objective, or vice versa.
+  // Detected by asking whether each room's cards cover the roster this framing
+  // would seed, exactly once each.
+  const roster = blankCardPlan(state).map((entry) =>
+    breakoutFraming === "objectives" ? entry.objectiveId : entry.type,
+  );
+  const mismatched = sortedBreakouts(state).filter((breakout) => {
+    const mine = state.findings.filter((f) => f.breakoutId === breakout.id);
+    if (mine.length === 0) return false;
+    if (mine.length !== roster.length) return true;
+    const covered = new Set(
+      mine.map((f) => (breakoutFraming === "objectives" ? f.objectiveId : f.type)),
+    );
+    return roster.some((key) => !covered.has(key));
+  });
+
+  return (
+    <Card
+      title="Session format"
+      hint="Whether this session runs on Strategic Findings or Strategic Objectives. Set it before the rooms start writing."
+    >
+      <div className="grid gap-4 lg:grid-cols-2">
+        <FramingChoice
+          legend="Breakout sessions produce"
+          value={breakoutFraming}
+          options={[
+            {
+              value: "findings",
+              label: "Strategic Findings",
+              hint: "Five cards per room, one of each type — Momentum, Fragility, Bottleneck, Underappreciated Opportunity, Wildcard — with what changed and the evidence.",
+            },
+            {
+              value: "objectives",
+              label: "Strategic Objectives",
+              hint: `One card per objective (${objectives.length || "none set"}), each recording the risks and the opportunities that room sees against it.`,
+            },
+          ]}
+          onChange={(value) =>
+            void setFraming(state, { breakoutFraming: value }).then(notify)
+          }
+        />
+
+        <FramingChoice
+          legend="The panel bids to fill a team of"
+          value={auctionFraming}
+          disabled={auctionLocked}
+          disabledHint="Locked — the auction has started and every recorded award points at a slot in this format. Reset the auction to change it."
+          options={[
+            {
+              value: "objectives",
+              label: "Strategic Objectives",
+              hint: `One slot per objective (${objectives.length || "none set"}). Each round contests one objective, in the order set below.`,
+            },
+            {
+              value: "findings",
+              label: "Strategic Findings",
+              hint: "One slot per finding type. Each round contests one type, in the fixed order Momentum → Fragility → Bottleneck → Opportunity → Wildcard.",
+            },
+          ]}
+          onChange={(value) =>
+            void setFraming(state, { auctionFraming: value }).then(notify)
+          }
+        />
+      </div>
+
+      {breakoutFraming === "objectives" && objectives.length === 0 ? (
+        <div className="mt-4">
+          <Notice tone="error">
+            There are no strategic objectives yet, so there is nothing for the rooms to
+            write against. Add them below first.
+          </Notice>
+        </div>
+      ) : null}
+
+      {mismatched.length > 0 ? (
+        <div className="mt-4">
+          <Notice tone="warn">
+            {mismatched.length} breakout{mismatched.length === 1 ? "" : "s"} still hold
+            cards from a different format ({mismatched.map((b) => b.shortName).join(", ")}).
+            Use <strong>Rebuild breakout cards</strong> in Event lifecycle below.
+          </Notice>
+        </div>
+      ) : null}
+
+      <p className="text-paper-faint mt-4 text-xs leading-relaxed">
+        The two are independent. Matching them is the usual choice — rooms write by
+        objective, panelists collect a team of objectives — and when they match, the
+        operator is warned if a card is bought for a slot it does not belong to.
+      </p>
+    </Card>
+  );
+}
+
+function FramingChoice({
+  legend,
+  value,
+  options,
+  onChange,
+  disabled = false,
+  disabledHint,
+}: {
+  legend: string;
+  value: Framing;
+  options: { value: Framing; label: string; hint: string }[];
+  onChange: (value: Framing) => void;
+  disabled?: boolean;
+  disabledHint?: string;
+}) {
+  // A stable name per group, so the two radio sets do not fight each other.
+  const name = `framing-${legend.replace(/\W+/g, "-").toLowerCase()}`;
+
+  return (
+    <fieldset className="border-ink-500 rounded-sm border p-3">
+      <legend className="label mb-0 px-1">{legend}</legend>
+      <div className="space-y-2">
+        {options.map((option) => (
+          <label
+            key={option.value}
+            className={cx(
+              "flex items-start gap-3 rounded-sm border p-2.5 transition-colors",
+              value === option.value
+                ? "border-signal bg-signal/[0.07]"
+                : "border-ink-500",
+              disabled ? "cursor-not-allowed opacity-55" : "hover:border-paper-faint cursor-pointer",
+            )}
+          >
+            <input
+              type="radio"
+              name={name}
+              className="accent-signal mt-1"
+              checked={value === option.value}
+              disabled={disabled}
+              onChange={() => onChange(option.value)}
+            />
+            <span className="min-w-0">
+              <span className="text-paper block text-sm font-semibold">{option.label}</span>
+              <span className="text-paper-mute block text-xs leading-relaxed">
+                {option.hint}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {disabled && disabledHint ? (
+        <p className="text-paper-faint mt-2 text-[0.6875rem] leading-relaxed">
+          {disabledHint}
+        </p>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -277,6 +449,21 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
 
 function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notify }) {
   const objectives = sortedObjectives(state);
+  const { breakoutFraming, auctionFraming } = state.event;
+
+  // What the objectives are *for* depends on the format, and the answer changes
+  // how carefully they need writing — a prompt read aloud to open a round is a
+  // different thing from a heading five rooms write risks underneath.
+  const hint = [
+    auctionFraming === "objectives"
+      ? "The order here is the order of the auction rounds."
+      : "The auction runs on finding types, so these do not set the round order.",
+    breakoutFraming === "objectives"
+      ? "Each breakout writes one card per objective, so the prompt is the brief they see."
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   async function move(index: number, direction: -1 | 1) {
     const ordered = [...objectives];
@@ -287,7 +474,7 @@ function ObjectiveSettings({ state, notify }: { state: EventState; notify: Notif
   }
 
   return (
-    <Card title="Strategic objectives" hint="The order here is the order of the auction rounds.">
+    <Card title="Strategic objectives" hint={hint}>
       <ul className="space-y-4">
         {objectives.map((objective, index) => (
           <li key={objective.id} className="border-ink-500 rounded-sm border p-3">
@@ -420,6 +607,8 @@ function BreakoutSettings({ state, notify }: { state: EventState; notify: Notify
 function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
   const [confirm, setConfirm] = useState("");
   const armed = confirm.toUpperCase() === "RESET";
+  const words = lexicon(state);
+  const perRoom = blankCardPlan(state).length;
 
   return (
     <Card
@@ -428,8 +617,10 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
     >
       <div className="space-y-3">
         <Action
-          label="Seed empty finding templates"
-          hint="Gives every breakout its five blank cards. Skips rooms that already have findings."
+          label={`Seed empty ${words.item} templates`}
+          hint={`Gives every breakout its ${perRoom} blank card${perRoom === 1 ? "" : "s"}, one per ${
+            state.event.breakoutFraming === "objectives" ? "strategic objective" : "finding type"
+          }. Skips rooms that already have cards.`}
           onClick={() => void seedBlankFindings(state).then(notify)}
         />
         <Action
@@ -439,7 +630,7 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
         />
         <Action
           label="Reset the auction"
-          hint="Clears every transaction and returns to Round 0. Keeps all findings."
+          hint="Clears every transaction and returns to Round 0. Keeps all cards."
           tone="danger"
           onClick={() => void resetAuction().then(notify)}
         />
@@ -465,9 +656,18 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
             type="button"
             className="btn btn-danger"
             disabled={!armed}
+            onClick={() => void rebuildBreakoutCards(state).then(notify)}
+            title="Throws away every card and re-seeds blanks matching the session format."
+          >
+            Rebuild breakout cards
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={!armed}
             onClick={() => void clearFindings(state).then(notify)}
           >
-            Clear all findings
+            Clear all {words.itemPlural}
           </button>
           <button
             type="button"

@@ -242,6 +242,21 @@ function localAdapter(key: string): Adapter {
     const collections = ["breakouts", "findings", "panelists", "objectives", "transactions"];
 
     if (collections.includes(collection)) {
+      // Whole-collection write: `findings: null` to clear, or a keyed map to
+      // replace. Firebase treats these as ordinary values at that path, so the
+      // local adapter has to as well or "clear all findings" silently does
+      // nothing here.
+      if (id === undefined) {
+        const replacement =
+          value && typeof value === "object"
+            ? Object.entries(value as Record<string, { id?: string }>).map(
+                ([recordId, record]) => ({ ...record, id: record.id ?? recordId }),
+              )
+            : [];
+        (state as unknown as Record<string, unknown>)[collection] = replacement;
+        return;
+      }
+
       const list = state[collection as keyof EventState] as unknown as {
         id: string;
         [k: string]: unknown;

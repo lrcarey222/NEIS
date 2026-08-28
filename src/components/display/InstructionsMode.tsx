@@ -4,26 +4,32 @@ import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 
 import { cx } from "@/components/primitives";
-import { sortedBreakouts, sortedObjectives } from "@/lib/derive";
-import { FINDING_TYPES, FINDING_TYPE_META } from "@/lib/types";
+import { auctionSlots, breakoutCategories, lexicon, sortedBreakouts } from "@/lib/derive";
 import type { EventState } from "@/lib/types";
 
 /**
  * Mode 4 — the briefing screen.
  *
  * This is what is on the projector while the room is being seated and while
- * the moderator explains the exercise: how to get into your breakout, what the
- * five findings are, and what happens to them afterwards. It carries the room
- * PINs, because the failure mode this screen exists to prevent is a table that
- * never finds its link.
+ * the moderator explains the exercise: how to get into your breakout, what
+ * each table is being asked to write, and what happens to it afterwards. It
+ * carries the room PINs, because the failure mode this screen exists to
+ * prevent is a table that never finds its link.
+ *
+ * Steps 2 and 4 read the session format, so the projected brief is always the
+ * exercise actually being run — findings by type, or objectives with risks and
+ * opportunities.
  *
  * QR codes are generated in the browser, like the landing page — there is no
  * server in a static export, and it keeps the screen working on a conference
  * network that only survived the page load.
  */
 export function InstructionsMode({ state }: { state: EventState }) {
+  const words = lexicon(state);
   const breakouts = useMemo(() => sortedBreakouts(state), [state]);
-  const objectives = useMemo(() => sortedObjectives(state), [state]);
+  const categories = useMemo(() => breakoutCategories(state), [state]);
+  const slots = useMemo(() => auctionSlots(state), [state]);
+  const byObjective = state.event.breakoutFraming === "objectives";
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [host, setHost] = useState("");
 
@@ -71,7 +77,8 @@ export function InstructionsMode({ state }: { state: EventState }) {
         </div>
         <p className="text-paper-mute font-mono text-[0.6875em] tracking-[0.12em] uppercase">
           {breakouts.length} breakouts
-          <span className="text-paper-faint"> · </span>5 findings each
+          <span className="text-paper-faint"> · </span>
+          {categories.length} {words.itemPlural} each
           <span className="text-paper-faint"> · </span>then the auction
         </p>
       </div>
@@ -123,27 +130,36 @@ export function InstructionsMode({ state }: { state: EventState }) {
 
       <div className="mt-[0.9em] grid shrink-0 grid-cols-[1.5fr_1fr_1.15fr] gap-[0.75em]">
         <section className="panel p-[0.75em]">
-          <StepHeading number={2} title="Agree five findings — one of each type" compact />
+          <StepHeading
+            number={2}
+            title={
+              byObjective
+                ? `Record risks and opportunities for each of the ${categories.length} objectives`
+                : "Agree five findings — one of each type"
+            }
+            compact
+          />
           <ul className="mt-[0.5em] space-y-[0.3em]">
-            {FINDING_TYPES.map((type) => {
-              const meta = FINDING_TYPE_META[type];
-              return (
-                <li key={type} data-type={type} className="flex items-baseline gap-[0.5em]">
-                  <span
-                    aria-hidden="true"
-                    className="type-text w-[1em] shrink-0 text-center text-[0.8125em]"
-                  >
-                    {meta.glyph}
-                  </span>
-                  <span className="text-paper w-[10em] shrink-0 text-[0.8125em] leading-snug font-semibold">
-                    {meta.label}
-                  </span>
-                  <span className="text-paper-mute text-[0.75em] leading-snug">
-                    {meta.blurb}
-                  </span>
-                </li>
-              );
-            })}
+            {categories.map((category) => (
+              <li
+                key={category.key}
+                data-accent={category.accent}
+                className="flex items-baseline gap-[0.5em]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="type-text w-[1em] shrink-0 text-center text-[0.8125em]"
+                >
+                  {category.glyph}
+                </span>
+                <span className="text-paper w-[10em] shrink-0 text-[0.8125em] leading-snug font-semibold">
+                  {category.label}
+                </span>
+                <span className="text-paper-mute line-clamp-2 text-[0.75em] leading-snug">
+                  {category.blurb}
+                </span>
+              </li>
+            ))}
           </ul>
         </section>
 
@@ -155,12 +171,14 @@ export function InstructionsMode({ state }: { state: EventState }) {
               button.
             </Bullet>
             <Bullet>
-              Use <span className="text-paper-dim font-semibold">↑ / ↓</span> to rank your
-              five findings 1–5.
+              Use <span className="text-paper-dim font-semibold">↑ / ↓</span> to rank your{" "}
+              {categories.length} cards 1–{categories.length}.
             </Bullet>
             <Bullet>
-              <span className="text-paper-dim font-semibold">Submit findings</span> puts them
-              on the big screen. After that, corrections go through the operator.
+              <span className="text-paper-dim font-semibold">
+                Submit {words.itemPlural}
+              </span>{" "}
+              puts them on the big screen. After that, corrections go through the operator.
             </Bullet>
           </ul>
         </section>
@@ -172,17 +190,17 @@ export function InstructionsMode({ state }: { state: EventState }) {
             <span className="text-paper-dim font-semibold">
               {state.event.startingBudget} credits
             </span>{" "}
-            each, buying one finding for every objective:
+            each, buying one card for every {words.slotFullPlural}:
           </p>
-          {objectives.length ? (
+          {slots.length ? (
             <ol className="mt-[0.4em] space-y-[0.2em]">
-              {objectives.map((objective, index) => (
-                <li key={objective.id} className="flex items-baseline gap-[0.5em]">
+              {slots.map((slot, index) => (
+                <li key={slot.id} className="flex items-baseline gap-[0.5em]">
                   <span className="text-paper-faint tabular w-[1.2em] shrink-0 font-mono text-[0.625em]">
                     {index + 1}
                   </span>
                   <span className="text-paper text-[0.75em] leading-snug font-medium">
-                    {objective.name}
+                    {slot.name}
                   </span>
                 </li>
               ))}

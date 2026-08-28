@@ -66,9 +66,12 @@ function normaliseFinding(finding: Partial<Finding>, id: string): Finding {
     id: finding.id ?? id,
     breakoutId: finding.breakoutId ?? "",
     type: finding.type ?? "momentum",
+    objectiveId: finding.objectiveId ?? "",
     headline: finding.headline ?? "",
     whatChanged: finding.whatChanged ?? "",
     evidence: finding.evidence ?? "",
+    risks: finding.risks ?? "",
+    opportunities: finding.opportunities ?? "",
     whyItMatters: finding.whyItMatters ?? "",
     confidence: finding.confidence ?? "medium",
     breakoutRank: finding.breakoutRank ?? 1,
@@ -120,6 +123,10 @@ export function fromSnapshot(raw: unknown): EventState | null {
       currentRoundIndex: event.currentRoundIndex ?? -1,
       displayMode: event.displayMode ?? "board",
       status: event.status ?? "setup",
+      // Absent on an event created before the framings existed; those events
+      // were all findings-into-objectives, which is exactly this default pair.
+      breakoutFraming: event.breakoutFraming ?? "findings",
+      auctionFraming: event.auctionFraming ?? "objectives",
       declareWinner: event.declareWinner ?? false,
       showSummary: event.showSummary ?? false,
       enforceBudgetReserve: event.enforceBudgetReserve ?? false,
@@ -140,10 +147,20 @@ export function fromSnapshot(raw: unknown): EventState | null {
       prompt: o.prompt ?? "",
       roundOrder: o.roundOrder ?? 0,
     })),
-    transactions: toArray<Transaction>(data.transactions).map((t) => ({
-      ...t,
-      note: t.note ?? "",
+    transactions: toArray<Transaction & { objectiveId?: string }>(
+      data.transactions,
+    ).map((t) => ({
+      id: t.id,
+      findingId: t.findingId ?? "",
+      panelistId: t.panelistId ?? "",
+      // Schema 1 called this `objectiveId`, because the only kind of slot was a
+      // strategic objective. Read the old name — and drop it from the result,
+      // so the next write does not carry a dead field forward — and a
+      // pre-framing ledger still loads with its buyers and prices intact.
+      slotId: t.slotId ?? t.objectiveId ?? "",
       price: t.price ?? 0,
+      timestamp: t.timestamp ?? 0,
+      note: t.note ?? "",
     })),
     timer: { ...DEFAULT_TIMER, ...((data.timer as Partial<TimerState>) ?? {}) },
     revision: (data.revision as number) ?? 0,

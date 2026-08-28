@@ -1,14 +1,13 @@
 import {
   allFindingViews,
   allPanelistViews,
+  auctionSlots,
   byId,
+  findingCategory,
+  lexicon,
   sortedBreakouts,
 } from "./derive";
-import {
-  CONFIDENCE_META,
-  FINDING_TYPE_META,
-  type EventState,
-} from "./types";
+import { CONFIDENCE_META, type EventState } from "./types";
 
 /** RFC 4180 escaping. Excel is the target consumer, so CRLF line endings. */
 function cell(value: unknown): string {
@@ -46,9 +45,16 @@ export function downloadCsv(filename: string, body: string): void {
 
 // --- The three exports -----------------------------------------------------
 
-/** Every finding with its auction outcome attached — the master sheet. */
+/**
+ * Every breakout card with its auction outcome attached — the master sheet.
+ *
+ * Both framings' body fields are exported in every run: the columns a session
+ * did not use come back empty, and the sheet stays comparable between a
+ * findings event and an objectives one.
+ */
 export function findingsCsv(state: EventState): string {
   const order = new Map(sortedBreakouts(state).map((b, i) => [b.id, i]));
+  const words = lexicon(state);
 
   const rows = allFindingViews(state)
     .sort(
@@ -58,36 +64,40 @@ export function findingsCsv(state: EventState): string {
     )
     .map((view) => [
       view.breakout?.name ?? "",
-      FINDING_TYPE_META[view.finding.type].label,
+      view.category.label,
       view.finding.breakoutRank,
       view.finding.headline,
       view.finding.whatChanged,
       view.finding.evidence,
+      view.finding.risks,
+      view.finding.opportunities,
       view.finding.whyItMatters,
       CONFIDENCE_META[view.finding.confidence].short,
       view.finding.dissent,
       view.finding.submitted ? "yes" : "no",
       view.isDrafted ? "yes" : "no",
       view.panelist?.name ?? "",
-      view.objective?.name ?? "",
+      view.slot?.name ?? "",
       view.transaction?.price ?? "",
     ]);
 
   return toCsv(
     [
       "Breakout",
-      "Finding Type",
+      `${words.Item} Category`,
       "Breakout Rank",
       "Headline",
       "What Changed",
       "Evidence",
+      "Risks",
+      "Opportunities",
       "Why It Matters",
       "Confidence",
       "Dissent",
       "Submitted",
       "Drafted",
       "Winning Panelist",
-      "Strategic Objective",
+      words.Slot,
       "Price Paid",
     ],
     rows,
@@ -98,8 +108,9 @@ export function findingsCsv(state: EventState): string {
 export function transactionsCsv(state: EventState): string {
   const findings = byId(state.findings);
   const panelists = byId(state.panelists);
-  const objectives = byId(state.objectives);
+  const slots = byId(auctionSlots(state));
   const breakouts = byId(state.breakouts);
+  const words = lexicon(state);
 
   const rows = [...state.transactions]
     .sort((a, b) => a.timestamp - b.timestamp)
@@ -108,11 +119,11 @@ export function transactionsCsv(state: EventState): string {
       return [
         index + 1,
         new Date(t.timestamp).toISOString(),
-        objectives.get(t.objectiveId)?.name ?? "",
+        slots.get(t.slotId)?.name ?? "",
         panelists.get(t.panelistId)?.name ?? "",
         t.price,
         finding?.headline ?? "",
-        finding ? FINDING_TYPE_META[finding.type].label : "",
+        finding ? findingCategory(state, finding).label : "",
         finding ? (breakouts.get(finding.breakoutId)?.name ?? "") : "",
         t.note,
       ];
@@ -122,11 +133,11 @@ export function transactionsCsv(state: EventState): string {
     [
       "Order",
       "Timestamp (UTC)",
-      "Strategic Objective",
+      words.Slot,
       "Winning Panelist",
       "Price",
-      "Finding",
-      "Finding Type",
+      words.Item,
+      `${words.Item} Category`,
       "Breakout",
       "Operator Note",
     ],
@@ -134,20 +145,22 @@ export function transactionsCsv(state: EventState): string {
   );
 }
 
-/** One row per panelist-objective slot, including the ones left OPEN. */
+/** One row per panelist slot, including the ones left OPEN. */
 export function portfoliosCsv(state: EventState): string {
+  const words = lexicon(state);
+
   const rows = allPanelistViews(state).flatMap((view) =>
-    view.slots.map((slot) => [
+    view.slots.map((entry) => [
       view.panelist.name,
       view.panelist.affiliation,
       view.startingBudget,
       view.spent,
       view.remaining,
-      slot.objective.name,
-      slot.finding?.headline ?? "OPEN",
-      slot.breakout?.name ?? "",
-      slot.finding ? FINDING_TYPE_META[slot.finding.type].label : "",
-      slot.transaction?.price ?? "",
+      entry.slot.name,
+      entry.finding?.headline ?? "OPEN",
+      entry.breakout?.name ?? "",
+      entry.finding ? findingCategory(state, entry.finding).label : "",
+      entry.transaction?.price ?? "",
     ]),
   );
 
@@ -158,10 +171,10 @@ export function portfoliosCsv(state: EventState): string {
       "Starting Budget",
       "Total Spent",
       "Credits Remaining",
-      "Strategic Objective",
-      "Finding",
+      words.Slot,
+      words.Item,
       "Breakout",
-      "Finding Type",
+      `${words.Item} Category`,
       "Price Paid",
     ],
     rows,

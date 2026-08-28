@@ -10,7 +10,7 @@ import { AuctionMode } from "@/components/display/AuctionMode";
 import { BoardMode } from "@/components/display/BoardMode";
 import { InstructionsMode } from "@/components/display/InstructionsMode";
 import { PortfoliosMode } from "@/components/display/PortfoliosMode";
-import type { FindingView } from "@/lib/derive";
+import { lexicon, type FindingView } from "@/lib/derive";
 import { useEvent } from "@/lib/useEvent";
 import type { DisplayMode } from "@/lib/types";
 
@@ -99,7 +99,11 @@ export default function DisplayPage() {
 
         <div className="flex items-center gap-[1.5em]">
           {state.timer.visible ? <CountdownDisplay timer={state.timer} size="md" /> : null}
-          <ModeIndicator mode={mode} overridden={modeOverride !== null} />
+          <ModeIndicator
+            mode={mode}
+            boardLabel={lexicon(state).boardTitle}
+            overridden={modeOverride !== null}
+          />
           <StatusDot status={status} />
         </div>
       </header>
@@ -114,20 +118,26 @@ export default function DisplayPage() {
         <PortfoliosMode state={state} onOpenFinding={openFinding} />
       )}
 
-      <FindingDetail view={detail} onClose={() => setDetail(null)} />
+      <FindingDetail
+        view={detail}
+        slotLabel={lexicon(state).Slot}
+        onClose={() => setDetail(null)}
+      />
     </main>
   );
 }
 
 function ModeIndicator({
   mode,
+  boardLabel,
   overridden,
 }: {
   mode: DisplayMode;
+  boardLabel: string;
   overridden: boolean;
 }) {
   const labels: Record<DisplayMode, string> = {
-    board: "Findings Board",
+    board: boardLabel,
     auction: "Live Auction",
     portfolios: "Final Portfolios",
     instructions: "Instructions",

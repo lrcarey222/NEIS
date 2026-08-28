@@ -5,7 +5,14 @@ import { useState } from "react";
 import { FindingCard } from "@/components/FindingCard";
 import { FindingDetail } from "@/components/FindingDetail";
 import { Notice, cx } from "@/components/primitives";
-import { buildFindingView, findingsForBreakout, sortedBreakouts, type FindingView } from "@/lib/derive";
+import {
+  blankCardPlan,
+  buildFindingView,
+  findingsForBreakout,
+  lexicon,
+  sortedBreakouts,
+  type FindingView,
+} from "@/lib/derive";
 import { patchBreakout } from "@/lib/actions";
 import { usePresence } from "@/lib/useEvent";
 import type { EventState, SubmissionStatus } from "@/lib/types";
@@ -22,6 +29,8 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
 
   const breakouts = sortedBreakouts(state);
   const present = usePresence();
+  const words = lexicon(state);
+  const expected = blankCardPlan(state).length;
 
   async function setStatus(slug: string, submissionStatus: SubmissionStatus) {
     const result = await patchBreakout(state, slug, { submissionStatus });
@@ -66,8 +75,9 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
                     ) : null}
                   </div>
                   <p className="text-paper-faint mt-1 pl-4 font-mono text-[0.625rem] tracking-[0.1em] uppercase">
-                    {STATUS_LABEL[breakout.submissionStatus]} · {written}/{findings.length || 5}{" "}
-                    written · PIN {breakout.pin} · /breakout/{breakout.slug}
+                    {STATUS_LABEL[breakout.submissionStatus]} · {written}/
+                    {findings.length || expected} written · PIN {breakout.pin} · /breakout/
+                    {breakout.slug}
                   </p>
                 </button>
 
@@ -105,7 +115,7 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
                 <div className="border-ink-500 border-t p-4">
                   {findings.length === 0 ? (
                     <p className="text-paper-faint text-sm">
-                      No findings yet. Use “Seed empty finding templates” in Setup.
+                      No cards yet. Use “Seed empty {words.item} templates” in Setup.
                     </p>
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -126,7 +136,11 @@ export function BreakoutsPanel({ state }: { state: EventState }) {
         })}
       </div>
 
-      <FindingDetail view={detail} onClose={() => setDetail(null)} />
+      <FindingDetail
+        view={detail}
+        slotLabel={words.Slot}
+        onClose={() => setDetail(null)}
+      />
     </section>
   );
 }

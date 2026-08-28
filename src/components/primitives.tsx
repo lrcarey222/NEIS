@@ -2,29 +2,28 @@
 
 import type { ReactNode } from "react";
 
-import {
-  CONFIDENCE_META,
-  FINDING_TYPE_META,
-  type Confidence,
-  type FindingType,
-} from "@/lib/types";
+import type { Category } from "@/lib/derive";
+import { CONFIDENCE_META, type Confidence } from "@/lib/types";
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
 }
 
 /**
- * Finding-type badge. The glyph and the word are always rendered — colour is
- * the third signal, never the only one.
+ * Category badge — a finding type, or a strategic objective, depending on how
+ * the breakouts are framed. The glyph and the word are always rendered; colour
+ * is the third signal, never the only one.
  */
-export function TypeChip({
-  type,
+export function CategoryChip({
+  category,
   size = "sm",
+  full = false,
 }: {
-  type: FindingType;
+  category: Category;
   size?: "sm" | "md" | "lg";
+  /** Use the long label. Objective names are long, so chips default to short. */
+  full?: boolean;
 }) {
-  const meta = FINDING_TYPE_META[type];
   const sizing =
     size === "lg"
       ? "text-[0.8125em] px-2.5 py-1"
@@ -34,14 +33,15 @@ export function TypeChip({
 
   return (
     <span
-      data-type={type}
+      data-accent={category.accent}
+      title={full ? undefined : category.label}
       className={cx(
         "type-chip inline-flex items-center gap-1.5 rounded-sm font-mono font-semibold uppercase tracking-[0.1em] whitespace-nowrap",
         sizing,
       )}
     >
-      <span aria-hidden="true">{meta.glyph}</span>
-      {meta.label}
+      <span aria-hidden="true">{category.glyph}</span>
+      {full ? category.label : category.shortName}
     </span>
   );
 }

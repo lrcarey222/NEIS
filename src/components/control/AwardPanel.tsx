@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { Notice, TypeChip, cx } from "@/components/primitives";
+import { CategoryChip, Notice, cx } from "@/components/primitives";
 import {
   allPanelistViews,
+  auctionSlots,
   availableFindings,
-  currentObjective,
-  sortedObjectives,
+  currentSlot,
+  lexicon,
   validateAward,
 } from "@/lib/derive";
 import { awardFinding, setRound } from "@/lib/actions";
@@ -18,20 +19,21 @@ import type { EventState } from "@/lib/types";
  *
  * Design constraints come straight from the room: bidding ends, and the
  * operator has a few seconds to record the result before the moderator moves
- * on. So the objective is pre-selected from the current round, the finding list
- * is type-to-filter, panelists are one click each, and the whole thing is four
+ * on. So the slot is pre-selected from the current round, the card list is
+ * type-to-filter, panelists are one click each, and the whole thing is four
  * inputs and a confirm.
  *
  * Validation runs on every keystroke against the same function the server uses,
  * so the operator sees a problem before committing rather than as a rejection.
  */
 export function AwardPanel({ state }: { state: EventState }) {
-  const objectives = sortedObjectives(state);
+  const words = lexicon(state);
+  const slots = useMemo(() => auctionSlots(state), [state]);
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const available = useMemo(() => availableFindings(state), [state]);
-  const round = currentObjective(state);
+  const round = currentSlot(state);
 
-  const [objectiveId, setObjectiveId] = useState(round?.id ?? objectives[0]?.id ?? "");
+  const [slotId, setSlotId] = useState(round?.id ?? slots[0]?.id ?? "");
   const [findingId, setFindingId] = useState("");
   const [panelistId, setPanelistId] = useState("");
   const [price, setPrice] = useState("");
@@ -43,10 +45,18 @@ export function AwardPanel({ state }: { state: EventState }) {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
-  // Follow the operator's own round controls so the objective is right by default.
+  // Follow the operator's own round controls so the slot is right by default.
   useEffect(() => {
-    if (round?.id) setObjectiveId(round.id);
+    if (round?.id) setSlotId(round.id);
   }, [round?.id]);
+
+  // Switching the session format rewrites the slot roster underneath us.
+  const slotIds = slots.map((s) => s.id).join(",");
+  useEffect(() => {
+    setSlotId((current) =>
+      slotIds.split(",").includes(current) ? current : (slotIds.split(",")[0] ?? ""),
+    );
+  }, [slotIds]);
 
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -55,26 +65,26 @@ export function AwardPanel({ state }: { state: EventState }) {
       (view) =>
         view.finding.headline.toLowerCase().includes(needle) ||
         view.breakout?.name.toLowerCase().includes(needle) ||
-        view.finding.type.includes(needle),
+        view.category.label.toLowerCase().includes(needle),
     );
   }, [available, filter]);
 
   const selectedFinding = available.find((v) => v.finding.id === findingId) ?? null;
   const selectedPanelist = panelists.find((p) => p.panelist.id === panelistId) ?? null;
-  const selectedObjective = objectives.find((o) => o.id === objectiveId) ?? null;
+  const selectedSlot = slots.find((s) => s.id === slotId) ?? null;
 
   const parsedPrice = Number.parseInt(price, 10);
-  const ready = Boolean(findingId && panelistId && objectiveId && price.trim());
+  const ready = Boolean(findingId && panelistId && slotId && price.trim());
 
   const validation = useMemo(() => {
     if (!ready) return null;
     return validateAward(state, {
       findingId,
       panelistId,
-      objectiveId,
+      slotId,
       price: parsedPrice,
     });
-  }, [ready, state, findingId, panelistId, objectiveId, parsedPrice]);
+  }, [ready, state, findingId, panelistId, slotId, parsedPrice]);
 
   function reset() {
     setFindingId("");
@@ -91,7 +101,7 @@ export function AwardPanel({ state }: { state: EventState }) {
     const result = await awardFinding({
       findingId,
       panelistId,
-      objectiveId,
+      slotId,
       price: parsedPrice,
       acknowledgeWarnings: true,
       advanceRound,
@@ -119,7 +129,7 @@ export function AwardPanel({ state }: { state: EventState }) {
         <div className="min-w-0">
           <p className="eyebrow text-signal">
             {round
-              ? `Round ${state.event.currentRoundIndex + 1} of ${objectives.length}`
+              ? `Round ${state.event.currentRoundIndex + 1} of ${slots.length}`
               : state.event.currentRoundIndex < 0
                 ? "Auction not started"
                 : "All rounds complete"}
@@ -144,7 +154,7 @@ export function AwardPanel({ state }: { state: EventState }) {
             type="button"
             className="btn btn-ghost"
             onClick={() => void setRound(state, "next")}
-            disabled={state.event.currentRoundIndex >= objectives.length - 1}
+            disabled={state.event.currentRoundIndex >= slots.length - 1}
           >
             Next →
           </button>
@@ -155,17 +165,17 @@ export function AwardPanel({ state }: { state: EventState }) {
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
-        {/* Finding picker */}
+        {/* Card picker */}
         <div className="panel flex min-h-0 flex-col p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <label className="label mb-0" htmlFor="finding-filter">
-              Finding — {available.length} available
+              {words.Item} — {available.length} available
             </label>
           </div>
           <input
             id="finding-filter"
             className="field mb-3"
-            placeholder="Type to filter by headline, breakout or type…"
+            placeholder="Type to filter by headline, breakout or category…"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
@@ -174,8 +184,8 @@ export function AwardPanel({ state }: { state: EventState }) {
             {filtered.length === 0 ? (
               <p className="text-paper-faint py-8 text-center text-sm">
                 {available.length === 0
-                  ? "Every submitted finding has been sold."
-                  : "No findings match that filter."}
+                  ? `Every submitted ${words.item} has been sold.`
+                  : "Nothing matches that filter."}
               </p>
             ) : (
               filtered.map((view) => {
@@ -184,7 +194,7 @@ export function AwardPanel({ state }: { state: EventState }) {
                   <button
                     key={view.finding.id}
                     type="button"
-                    data-type={view.finding.type}
+                    data-accent={view.category.accent}
                     onClick={() => {
                       setFindingId(active ? "" : view.finding.id);
                       setConfirming(false);
@@ -197,13 +207,13 @@ export function AwardPanel({ state }: { state: EventState }) {
                     )}
                   >
                     <div className="mb-1.5 flex items-center gap-2">
-                      <TypeChip type={view.finding.type} />
+                      <CategoryChip category={view.category} />
                       <span className="text-paper-faint font-mono text-[0.625rem] tracking-[0.1em] uppercase">
                         {view.breakout?.shortName} · rank {view.finding.breakoutRank}
                       </span>
                     </div>
                     <p className="text-paper text-sm leading-snug font-medium">
-                      {view.finding.headline || "Untitled finding"}
+                      {view.finding.headline || `Untitled ${words.item}`}
                     </p>
                   </button>
                 );
@@ -215,21 +225,21 @@ export function AwardPanel({ state }: { state: EventState }) {
         {/* Transaction form */}
         <div className="panel flex flex-col gap-4 p-4">
           <div>
-            <label className="label" htmlFor="award-objective">
-              Objective
+            <label className="label" htmlFor="award-slot">
+              {words.Slot}
             </label>
             <select
-              id="award-objective"
+              id="award-slot"
               className="field"
-              value={objectiveId}
+              value={slotId}
               onChange={(event) => {
-                setObjectiveId(event.target.value);
+                setSlotId(event.target.value);
                 setConfirming(false);
               }}
             >
-              {objectives.map((objective, index) => (
-                <option key={objective.id} value={objective.id}>
-                  {index + 1}. {objective.name}
+              {slots.map((slot, index) => (
+                <option key={slot.id} value={slot.id}>
+                  {index + 1}. {slot.name}
                 </option>
               ))}
             </select>
@@ -241,7 +251,7 @@ export function AwardPanel({ state }: { state: EventState }) {
               {panelists.map((view) => {
                 const active = view.panelist.id === panelistId;
                 const filledThis = view.slots.find(
-                  (slot) => slot.objective.id === objectiveId,
+                  (slot) => slot.slot.id === slotId,
                 )?.transaction;
 
                 return (
@@ -262,7 +272,7 @@ export function AwardPanel({ state }: { state: EventState }) {
                     )}
                     title={
                       filledThis
-                        ? `${view.panelist.name} has already filled this objective.`
+                        ? `${view.panelist.name} has already filled this slot.`
                         : undefined
                     }
                   >
@@ -341,7 +351,7 @@ export function AwardPanel({ state }: { state: EventState }) {
                 </strong>{" "}
                 to <strong>{selectedPanelist?.panelist.name}</strong> for{" "}
                 <strong className="tabular">{parsedPrice} credits</strong> under{" "}
-                <strong>{selectedObjective?.name}</strong>?
+                <strong>{selectedSlot?.name}</strong>?
               </p>
               <div className="flex gap-2">
                 <button
@@ -370,7 +380,7 @@ export function AwardPanel({ state }: { state: EventState }) {
               disabled={!ready || !validation?.ok || busy}
               onClick={() => setConfirming(true)}
             >
-              AWARD FINDING
+              AWARD {words.Item.toUpperCase()}
             </button>
           )}
         </div>

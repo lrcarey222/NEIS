@@ -1,15 +1,16 @@
 "use client";
 
 import type { FindingView } from "@/lib/derive";
-import { ConfidenceTag, RankTag, TypeChip, cx } from "./primitives";
+import { CategoryChip, ConfidenceTag, RankTag, cx } from "./primitives";
 
 /**
- * The finding as it appears on the board and in the auction pool.
+ * A breakout card as it appears on the board and in the auction pool.
  *
- * Hierarchy is deliberate and matches the brief: breakout and finding type
- * first (the coloured left bar and the chip), then the headline at the largest
- * size on the card, then the metadata row. From the back of the room the bar
- * and the headline are what carry.
+ * Hierarchy is deliberate and matches the brief: breakout and category first
+ * (the coloured left bar and the chip), then the headline at the largest size
+ * on the card, then the metadata row. From the back of the room the bar and the
+ * headline are what carry. The category is a finding type or a strategic
+ * objective depending on the framing; nothing here needs to know which.
  */
 export function FindingCard({
   view,
@@ -23,12 +24,12 @@ export function FindingCard({
   /** Play the "leaving the board" animation — set briefly after a sale. */
   soldAnimation?: boolean;
 }) {
-  const { finding, isDrafted, panelist, objective, transaction } = view;
+  const { finding, category, isDrafted, panelist, slot, transaction } = view;
   const interactive = Boolean(onOpen);
 
   return (
     <article
-      data-type={finding.type}
+      data-accent={category.accent}
       data-finding-id={finding.id}
       className={cx(
         "type-bar panel group relative w-full text-left transition-colors",
@@ -53,7 +54,7 @@ export function FindingCard({
       }
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
-      aria-label={interactive ? `Open finding: ${finding.headline}` : undefined}
+      aria-label={interactive ? `Open card: ${finding.headline}` : undefined}
     >
       <div
         className={cx(
@@ -61,7 +62,7 @@ export function FindingCard({
           compact ? "mb-[0.4em]" : "mb-2",
         )}
       >
-        <TypeChip type={finding.type} size={compact ? "sm" : "md"} />
+        <CategoryChip category={category} size={compact ? "sm" : "md"} />
         {isDrafted ? (
           <span className="bg-signal text-ink-900 rounded-sm px-1.5 py-0.5 font-mono text-[0.5625em] font-bold tracking-[0.14em] uppercase">
             Drafted
@@ -80,7 +81,7 @@ export function FindingCard({
         title={finding.headline || undefined}
       >
         {finding.headline || (
-          <span className="text-paper-faint italic">Untitled finding</span>
+          <span className="text-paper-faint italic">Untitled card</span>
         )}
       </h3>
 
@@ -100,10 +101,10 @@ export function FindingCard({
             "border-ink-500 border-t",
             compact ? "mt-[0.35em] pt-[0.35em]" : "mt-2.5 pt-2",
           )}
-          // On the board the objective goes in the tooltip rather than a second
+          // On the board the slot goes in the tooltip rather than a second
           // line: buyer and price are what the room reads at a glance, and the
           // full record is one click away in the detail panel.
-          title={objective ? `Purchased for ${objective.name}` : undefined}
+          title={slot ? `Purchased for ${slot.name}` : undefined}
         >
           <p className="text-paper-dim truncate text-[0.75em] leading-tight font-medium">
             {panelist.name}
@@ -112,7 +113,7 @@ export function FindingCard({
             {compact ? null : (
               <>
                 <span className="text-paper-faint"> · </span>
-                <span className="text-paper-faint">{objective?.name}</span>
+                <span className="text-paper-faint">{slot?.name}</span>
               </>
             )}
           </p>

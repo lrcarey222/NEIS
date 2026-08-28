@@ -13,7 +13,9 @@ import {
   type Breakout,
   type EventState,
   type Finding,
+  FINDING_TYPES,
   type FindingType,
+  type Framing,
   type Objective,
   type Panelist,
   SCHEMA_VERSION,
@@ -498,9 +500,15 @@ function makeFindings(submitted: boolean): Finding[] {
         id: `fd-${breakout.slug}-${seed.type}`,
         breakoutId: breakout.id,
         type: seed.type,
+        // The demo content is written as findings; under the objectives framing
+        // it is pinned to the objective in the matching round position so the
+        // rehearsal board still fills out.
+        objectiveId: OBJECTIVE_BLUEPRINT[index % OBJECTIVE_BLUEPRINT.length].id,
         headline: seed.headline,
         whatChanged: seed.whatChanged,
         evidence: seed.evidence,
+        risks: "",
+        opportunities: "",
         whyItMatters: seed.whyItMatters,
         confidence: seed.confidence,
         breakoutRank: seed.breakoutRank,
@@ -522,6 +530,10 @@ export interface CreateEventOptions {
   /** Include the 25 demo findings, pre-submitted and ready to auction. */
   demo?: boolean;
   panelistNames?: string[];
+  /** What each breakout room writes. Defaults to the five finding types. */
+  breakoutFraming?: Framing;
+  /** What a panelist's team is made of. Defaults to the strategic objectives. */
+  auctionFraming?: Framing;
 }
 
 export function createEvent(options: CreateEventOptions = {}): EventState {
@@ -553,6 +565,8 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
       currentRoundIndex: demo ? 0 : -1,
       displayMode: "board",
       status: demo ? "auction" : "setup",
+      breakoutFraming: options.breakoutFraming ?? "findings",
+      auctionFraming: options.auctionFraming ?? "objectives",
       declareWinner: false,
       showSummary: false,
       enforceBudgetReserve: false,
@@ -575,23 +589,32 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
   };
 }
 
-/** Blank findings for a breakout that is starting from scratch in the room. */
-export function createBlankFindings(breakoutId: string): Finding[] {
-  const now = Date.now();
-  const types: FindingType[] = [
-    "momentum",
-    "fragility",
-    "bottleneck",
-    "opportunity",
-    "wildcard",
-  ];
-  return types.map((type, index) => ({
-    id: `fd-${breakoutId}-${type}-${now.toString(36)}${index}`,
-    breakoutId,
+/**
+ * Blank cards for a breakout that is starting from scratch in the room.
+ *
+ * `plan` comes from `blankCardPlan()` in lib/derive.ts and is what makes this
+ * framing-aware: one entry per finding type, or one per strategic objective.
+ * It defaults to the five finding types so callers that predate the framings
+ * (and the end-to-end test) keep working unchanged.
+ */
+export function createBlankFindings(
+  breakoutId: string,
+  plan: { type: FindingType; objectiveId: string }[] = FINDING_TYPES.map((type) => ({
     type,
+    objectiveId: "",
+  })),
+): Finding[] {
+  const now = Date.now();
+  return plan.map((entry, index) => ({
+    id: `fd-${breakoutId}-${entry.objectiveId || entry.type}-${now.toString(36)}${index}`,
+    breakoutId,
+    type: entry.type,
+    objectiveId: entry.objectiveId,
     headline: "",
     whatChanged: "",
     evidence: "",
+    risks: "",
+    opportunities: "",
     whyItMatters: "",
     confidence: "medium" as const,
     breakoutRank: index + 1,

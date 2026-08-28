@@ -3,10 +3,13 @@
 import { useMemo } from "react";
 
 import { cx } from "@/components/primitives";
-import { FINDING_TYPE_META } from "@/lib/types";
 import {
   allPanelistViews,
+  auctionSlots,
+  buildFindingView,
   buildSummary,
+  findingCategory,
+  lexicon,
   type FindingView,
   type PanelistView,
 } from "@/lib/derive";
@@ -15,7 +18,7 @@ import type { EventState } from "@/lib/types";
 /**
  * Mode 3 — Final Portfolios.
  *
- * Every panelist's five slots side by side, then the three summary cuts the
+ * Every panelist's slots side by side, then the three summary cuts the
  * moderator uses to close the session: what the room paid most for, which
  * breakouts got drafted, and what nobody wanted.
  */
@@ -26,8 +29,10 @@ export function PortfoliosMode({
   state: EventState;
   onOpenFinding: (view: FindingView) => void;
 }) {
+  const words = lexicon(state);
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const summary = useMemo(() => buildSummary(state), [state]);
+  const slotCount = auctionSlots(state).length;
 
   return (
     // Two full screens, not one split screen: the roster and the summary cuts
@@ -39,7 +44,7 @@ export function PortfoliosMode({
         <h2 className="text-paper mt-[0.15em] text-[1.75em] leading-none font-semibold">
           {state.event.showSummary
             ? "Where the credits went"
-            : "Five findings, five strategic objectives"}
+            : `${slotCount} ${words.itemPlural}, ${slotCount} ${words.slotPlural}`}
         </h2>
       </div>
 
@@ -109,8 +114,14 @@ function SummaryScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[0.75em]">
       <dl className="grid shrink-0 grid-cols-4 gap-[0.75em]">
-        <HeadlineStat label="Findings submitted" value={summary.submittedFindings} />
-        <HeadlineStat label="Findings acquired" value={summary.draftedFindings} />
+        <HeadlineStat
+          label={`${lexicon(state).ItemPlural} submitted`}
+          value={summary.submittedFindings}
+        />
+        <HeadlineStat
+          label={`${lexicon(state).ItemPlural} acquired`}
+          value={summary.draftedFindings}
+        />
         <HeadlineStat
           label="Credits committed"
           value={`${summary.totalSpent} / ${summary.totalBudget}`}
@@ -123,7 +134,10 @@ function SummaryScreen({
       </dl>
 
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-[1em]">
-        <SummaryPanel title="Highest-valued findings" hint="Ranked by auction price">
+        <SummaryPanel
+          title={`Highest-valued ${lexicon(state).itemPlural}`}
+          hint="Ranked by auction price"
+        >
           {summary.highestValued.length === 0 ? (
             <Placeholder>Nothing has been sold yet.</Placeholder>
           ) : (
@@ -154,7 +168,10 @@ function SummaryScreen({
           )}
         </SummaryPanel>
 
-        <SummaryPanel title="Most represented breakouts" hint="Findings drafted per room">
+        <SummaryPanel
+          title="Most represented breakouts"
+          hint={`${lexicon(state).ItemPlural} drafted per room`}
+        >
           <ol className="min-h-0 flex-1 space-y-[0.9em]">
             {summary.breakoutRepresentation.map((row) => {
               const max = Math.max(1, summary.breakoutRepresentation[0]?.count ?? 1);
@@ -181,11 +198,11 @@ function SummaryScreen({
         </SummaryPanel>
 
         <SummaryPanel
-          title="Undrafted findings"
+          title={`Undrafted ${lexicon(state).itemPlural}`}
           hint={`${summary.undrafted.length} left on the board`}
         >
           {summary.undrafted.length === 0 ? (
-            <Placeholder>Every finding was acquired.</Placeholder>
+            <Placeholder>Every card was acquired.</Placeholder>
           ) : (
             <ul className="scroll-fade min-h-0 flex-1 space-y-[0.7em] overflow-y-auto">
               {summary.undrafted.slice(0, 8).map((view) => (
@@ -193,7 +210,7 @@ function SummaryScreen({
                   <button
                     type="button"
                     onClick={() => onOpenFinding(view)}
-                    data-type={view.finding.type}
+                    data-accent={view.category.accent}
                     className="type-bar w-full pl-[0.6em] text-left"
                   >
                     <p className="text-paper-dim line-clamp-2 text-[0.8125em] leading-snug">
@@ -260,59 +277,52 @@ function PortfolioCard({
       </header>
 
       <ol className="flex flex-1 flex-col gap-[0.4em] p-[0.6em]">
-        {view.slots.map((slot) => (
-          <li
-            key={slot.objective.id}
-            data-type={slot.finding?.type}
-            className={cx(
-              "flex flex-1 flex-col rounded-sm px-[0.55em] py-[0.5em]",
-              slot.finding ? "type-bar bg-ink-700" : "border-ink-500 border border-dashed",
-            )}
-          >
-            <p className="text-paper-faint font-mono text-[0.5625em] leading-tight font-semibold tracking-[0.1em] uppercase">
-              {slot.objective.name}
-            </p>
+        {view.slots.map(({ slot, finding, transaction, breakout }) => {
+          const category = finding ? findingCategory(state, finding) : null;
 
-            {slot.finding && slot.transaction ? (
-              <button
-                type="button"
-                onClick={() =>
-                  onOpenFinding({
-                    finding: slot.finding!,
-                    breakout: slot.breakout,
-                    transaction: slot.transaction,
-                    panelist: view.panelist,
-                    objective: slot.objective,
-                    isDrafted: true,
-                    isAvailable: false,
-                  })
-                }
-                className="mt-[0.3em] w-full text-left"
-              >
-                <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">
-                  {slot.finding.headline}
-                </p>
-                {/* Type, source breakout and price on one line — five of these
-                    plus the summary band have to share a single 16:9 screen. */}
-                <div className="mt-[0.3em] flex items-baseline justify-between gap-[0.5em]">
-                  <span className="type-text truncate font-mono text-[0.5625em] font-semibold tracking-[0.08em] uppercase">
-                    <span aria-hidden="true">{FINDING_TYPE_META[slot.finding.type].glyph}</span>{" "}
-                    {FINDING_TYPE_META[slot.finding.type].label}
-                    <span className="text-paper-faint"> · </span>
-                    <span className="text-paper-mute">{slot.breakout?.shortName}</span>
-                  </span>
-                  <span className="tabular text-signal shrink-0 font-mono text-[0.75em] font-bold">
-                    {slot.transaction.price}
-                  </span>
-                </div>
-              </button>
-            ) : (
-              <p className="text-paper-faint mt-[0.3em] font-mono text-[0.6875em] font-bold tracking-[0.14em] uppercase">
-                Open
+          return (
+            <li
+              key={slot.id}
+              data-accent={category?.accent}
+              className={cx(
+                "flex flex-1 flex-col rounded-sm px-[0.55em] py-[0.5em]",
+                finding ? "type-bar bg-ink-700" : "border-ink-500 border border-dashed",
+              )}
+            >
+              <p className="text-paper-faint font-mono text-[0.5625em] leading-tight font-semibold tracking-[0.1em] uppercase">
+                {slot.name}
               </p>
-            )}
-          </li>
-        ))}
+
+              {finding && transaction && category ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenFinding(buildFindingView(state, finding))}
+                  className="mt-[0.3em] w-full text-left"
+                >
+                  <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">
+                    {finding.headline}
+                  </p>
+                  {/* Category, source breakout and price on one line — five of
+                      these plus the summary band have to share one 16:9 screen. */}
+                  <div className="mt-[0.3em] flex items-baseline justify-between gap-[0.5em]">
+                    <span className="type-text truncate font-mono text-[0.5625em] font-semibold tracking-[0.08em] uppercase">
+                      <span aria-hidden="true">{category.glyph}</span> {category.shortName}
+                      <span className="text-paper-faint"> · </span>
+                      <span className="text-paper-mute">{breakout?.shortName}</span>
+                    </span>
+                    <span className="tabular text-signal shrink-0 font-mono text-[0.75em] font-bold">
+                      {transaction.price}
+                    </span>
+                  </div>
+                </button>
+              ) : (
+                <p className="text-paper-faint mt-[0.3em] font-mono text-[0.6875em] font-bold tracking-[0.14em] uppercase">
+                  Open
+                </p>
+              )}
+            </li>
+          );
+        })}
       </ol>
 
       {/* Breakout spread — how diversified this portfolio is. */}

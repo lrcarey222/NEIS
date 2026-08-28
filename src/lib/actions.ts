@@ -1,6 +1,6 @@
 "use client";
 
-import { validateAward, type AwardInput } from "./derive";
+import { auctionSlots, blankCardPlan, validateAward, type AwardInput } from "./derive";
 import { net } from "./net";
 import { createBlankFindings, createEvent, type CreateEventOptions } from "./seed";
 import { toMap } from "./serialize";
@@ -10,6 +10,7 @@ import type {
   EventState,
   Finding,
   FindingType,
+  Framing,
   Objective,
   Panelist,
   SubmissionStatus,
@@ -70,7 +71,7 @@ export async function createNewEvent(options: CreateEventOptions): Promise<Resul
   return guard(() => net().writeEvent(createEvent(options)));
 }
 
-/** Clears the auction but keeps every finding the breakouts produced. */
+/** Clears the auction but keeps every card the breakouts produced. */
 export async function resetAuction(): Promise<Result> {
   return guard(() =>
     net().updatePaths({
@@ -97,17 +98,58 @@ export async function clearFindings(state: EventState): Promise<Result> {
   return guard(() => net().updatePaths(updates));
 }
 
-/** Gives every room its five blank cards, skipping rooms that already have some. */
+/**
+ * Gives every room its blank cards, skipping rooms that already have some.
+ *
+ * The roster follows the breakout framing: five typed findings, or one card per
+ * strategic objective.
+ */
 export async function seedBlankFindings(state: EventState): Promise<Result> {
+  const plan = blankCardPlan(state);
+  if (plan.length === 0) {
+    return fail("There are no strategic objectives to build cards from. Add some first.");
+  }
+
   const updates: Record<string, unknown> = {};
   for (const breakout of state.breakouts) {
     if (state.findings.some((f) => f.breakoutId === breakout.id)) continue;
-    for (const finding of createBlankFindings(breakout.id)) {
+    for (const finding of createBlankFindings(breakout.id, plan)) {
       updates[`findings/${finding.id}`] = finding;
     }
   }
   if (Object.keys(updates).length === 0) {
-    return fail("Every breakout already has findings.");
+    return fail("Every breakout already has cards.");
+  }
+  return guard(() => net().updatePaths(updates));
+}
+
+/**
+ * Throws away every card and re-seeds blanks for the current framing.
+ *
+ * The escape hatch for switching the breakout framing after the rooms have
+ * already been seeded: the existing cards carry the wrong roster, and no
+ * per-card edit fixes that. Destructive, so /control keeps it behind RESET.
+ */
+export async function rebuildBreakoutCards(state: EventState): Promise<Result> {
+  const plan = blankCardPlan(state);
+  if (plan.length === 0) {
+    return fail("There are no strategic objectives to build cards from. Add some first.");
+  }
+  if (state.transactions.length > 0) {
+    return fail("Cards have already been sold at auction. Reset the auction first.");
+  }
+
+  // The whole `findings` node is replaced in one path rather than as
+  // `findings/<id>` entries plus a `findings: null` — Firebase rejects a
+  // multi-path update whose keys are ancestors of one another.
+  const replacement: Record<string, Finding> = {};
+  const updates: Record<string, unknown> = { findings: replacement };
+  for (const breakout of state.breakouts) {
+    updates[`breakouts/${breakout.id}/submissionStatus`] = "not_started";
+    updates[`breakouts/${breakout.id}/submittedAt`] = null;
+    for (const finding of createBlankFindings(breakout.id, plan)) {
+      replacement[finding.id] = finding;
+    }
   }
   return guard(() => net().updatePaths(updates));
 }
@@ -154,8 +196,40 @@ export async function patchEvent(
   return guard(() => net().updatePaths(updates));
 }
 
+/**
+ * Switch what the breakouts write, or what the panel's teams are made of.
+ *
+ * Separate from `patchEvent` because the two fields have consequences a generic
+ * field write would not carry: the auction framing redefines what a round *is*,
+ * so the round pointer has to go back to standby, and it cannot change at all
+ * once transactions exist because every recorded `slotId` would stop resolving.
+ */
+export async function setFraming(
+  state: EventState,
+  patch: { breakoutFraming?: Framing; auctionFraming?: Framing },
+): Promise<Result> {
+  const updates: Record<string, unknown> = {};
+
+  if (patch.breakoutFraming && patch.breakoutFraming !== state.event.breakoutFraming) {
+    updates["event/breakoutFraming"] = patch.breakoutFraming;
+  }
+
+  if (patch.auctionFraming && patch.auctionFraming !== state.event.auctionFraming) {
+    if (state.transactions.length > 0) {
+      return fail(
+        "The auction has started, and every recorded award points at a slot in the current format. Reset the auction first.",
+      );
+    }
+    updates["event/auctionFraming"] = patch.auctionFraming;
+    updates["event/currentRoundIndex"] = -1;
+  }
+
+  if (Object.keys(updates).length === 0) return OK;
+  return guard(() => net().updatePaths(updates));
+}
+
 export async function setRound(state: EventState, target: number | "next" | "prev") {
-  const last = state.objectives.length - 1;
+  const last = auctionSlots(state).length - 1;
   const current = state.event.currentRoundIndex;
   const next =
     target === "next" ? current + 1 : target === "prev" ? current - 1 : target;
@@ -219,9 +293,12 @@ export type FindingPatch = Partial<
   Pick<
     Finding,
     | "type"
+    | "objectiveId"
     | "headline"
     | "whatChanged"
     | "evidence"
+    | "risks"
+    | "opportunities"
     | "whyItMatters"
     | "confidence"
     | "breakoutRank"
@@ -255,9 +332,12 @@ export async function createFinding(
     id: newId("fd"),
     breakoutId,
     type: patch.type ?? "momentum",
+    objectiveId: patch.objectiveId ?? "",
     headline: patch.headline ?? "",
     whatChanged: patch.whatChanged ?? "",
     evidence: patch.evidence ?? "",
+    risks: patch.risks ?? "",
+    opportunities: patch.opportunities ?? "",
     whyItMatters: patch.whyItMatters ?? "",
     confidence: patch.confidence ?? "medium",
     breakoutRank: patch.breakoutRank ?? siblings.length + 1,
@@ -271,7 +351,7 @@ export async function createFinding(
 
 export async function deleteFinding(state: EventState, id: string): Promise<Result> {
   if (state.transactions.some((t) => t.findingId === id)) {
-    return fail("This finding has been sold at auction. Undo the transaction first.");
+    return fail("This card has been sold at auction. Undo the transaction first.");
   }
   return guard(() => net().removePath(`findings/${id}`));
 }
@@ -401,9 +481,19 @@ export async function reorderObjectives(orderedIds: string[]): Promise<Result> {
 }
 
 export async function deleteObjective(state: EventState, id: string): Promise<Result> {
-  if (state.transactions.some((t) => t.objectiveId === id)) {
+  if (state.transactions.some((t) => t.slotId === id)) {
     return fail(
-      "Findings have already been bought for this objective. Undo those transactions first.",
+      "Cards have already been bought for this objective. Undo those transactions first.",
+    );
+  }
+  // Under the objectives framing the rooms write one card *per* objective, so
+  // removing one would orphan five cards mid-session.
+  if (
+    state.event.breakoutFraming === "objectives" &&
+    state.findings.some((f) => f.objectiveId === id)
+  ) {
+    return fail(
+      "The breakout rooms have cards for this objective. Clear or rebuild the cards first.",
     );
   }
   return guard(() => net().removePath(`objectives/${id}`));
@@ -418,11 +508,11 @@ export interface AwardOptions extends AwardInput {
 }
 
 /**
- * Award a finding — the single most important write in the application.
+ * Award a card — the single most important write in the application.
  *
  * The validation runs *inside* a database transaction, against the committed
  * state rather than the copy this browser happened to be rendering. Two
- * operators on two laptops clicking AWARD on the same finding cannot both
+ * operators on two laptops clicking AWARD on the same card cannot both
  * succeed: the second attempt re-reads, fails validation, and aborts.
  */
 export async function awardFinding(options: AwardOptions): Promise<Result> {
@@ -452,7 +542,7 @@ export async function awardFinding(options: AwardOptions): Promise<Result> {
       id: newId("tx"),
       findingId: options.findingId,
       panelistId: options.panelistId,
-      objectiveId: options.objectiveId,
+      slotId: options.slotId,
       price: options.price,
       timestamp: Date.now(),
       note: options.note ?? "",
@@ -470,7 +560,7 @@ export async function awardFinding(options: AwardOptions): Promise<Result> {
     if (options.advanceRound) {
       next.event.currentRoundIndex = Math.min(
         next.event.currentRoundIndex + 1,
-        next.objectives.length - 1,
+        auctionSlots(next).length - 1,
       );
     }
     next.revision = (state.revision ?? 0) + 1;
@@ -529,7 +619,7 @@ export async function undoTransaction(
 /** Correct a recorded transaction in place — wrong price, wrong panelist. */
 export async function patchTransaction(
   id: string,
-  patch: Partial<Pick<Transaction, "panelistId" | "objectiveId" | "price" | "note">>,
+  patch: Partial<Pick<Transaction, "panelistId" | "slotId" | "price" | "note">>,
   acknowledgeWarnings = false,
 ): Promise<Result> {
   let rejection: Result | null = null;
@@ -546,7 +636,7 @@ export async function patchTransaction(
     const validation = validateAward(state, {
       findingId: merged.findingId,
       panelistId: merged.panelistId,
-      objectiveId: merged.objectiveId,
+      slotId: merged.slotId,
       price: merged.price,
       excludeTransactionId: id,
     });

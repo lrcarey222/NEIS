@@ -66,9 +66,13 @@ export default function LandingPage() {
           </h1>
         </div>
         <p className="text-paper-mute mt-3 max-w-2xl leading-relaxed">
-          Five breakouts each record five Strategic Findings. Every finding then goes to
-          auction against five strategic objectives. Scan your room&apos;s code to open its
-          workspace.
+          {state?.event.breakoutFraming === "objectives"
+            ? "Each breakout records the risks and opportunities it sees against every Strategic Objective."
+            : "Each breakout records five Strategic Findings."}{" "}
+          {state?.event.auctionFraming === "findings"
+            ? "The panel then bids to assemble a team of findings, one of each type."
+            : "Everything then goes to auction against the strategic objectives."}{" "}
+          Scan your room&apos;s code to open its workspace.
         </p>
       </header>
 

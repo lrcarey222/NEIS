@@ -6,11 +6,15 @@ import { FindingCard } from "@/components/FindingCard";
 import { cx } from "@/components/primitives";
 import {
   allPanelistViews,
+  auctionSlots,
   availableFindings,
-  currentObjective,
-  sortedObjectives,
+  buildFindingView,
+  currentSlot,
+  findingCategory,
+  lexicon,
   type FindingView,
   type PanelistView,
+  type Slot,
 } from "@/lib/derive";
 import type { EventState } from "@/lib/types";
 
@@ -29,8 +33,9 @@ export function AuctionMode({
   state: EventState;
   onOpenFinding: (view: FindingView) => void;
 }) {
-  const objective = currentObjective(state);
-  const objectives = sortedObjectives(state);
+  const words = lexicon(state);
+  const round = currentSlot(state);
+  const slots = useMemo(() => auctionSlots(state), [state]);
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const available = useMemo(() => availableFindings(state), [state]);
   const justSold = useJustSold(state);
@@ -41,20 +46,20 @@ export function AuctionMode({
     <div className="flex flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
       {/* Round banner */}
       <div className="border-ink-500 mb-[1em] border-b pb-[0.875em]">
-        {objective ? (
+        {round ? (
           <div className="flex items-end justify-between gap-[2em]">
             <div className="min-w-0">
               <p className="eyebrow text-signal">
-                Round {roundNumber} of {objectives.length}
+                Round {roundNumber} of {slots.length}
               </p>
               <h2 className="text-paper mt-[0.15em] text-[2.5em] leading-none font-bold tracking-tight uppercase">
-                {objective.name}
+                {round.name}
               </h2>
               <p className="text-paper-mute mt-[0.6em] max-w-[52em] text-[0.9375em] leading-snug">
-                {objective.prompt}
+                {round.prompt}
               </p>
             </div>
-            <RoundPips objectives={objectives} current={state.event.currentRoundIndex} />
+            <RoundPips slots={slots} current={state.event.currentRoundIndex} />
           </div>
         ) : (
           <div>
@@ -65,7 +70,7 @@ export function AuctionMode({
             <p className="text-paper-mute mt-[0.5em] text-[0.9375em]">
               {state.event.currentRoundIndex < 0
                 ? "The moderator will open Round 1 shortly."
-                : "All strategic objectives have been contested."}
+                : `Every ${words.slot} has been contested.`}
             </p>
           </div>
         )}
@@ -88,8 +93,9 @@ export function AuctionMode({
           {panelists.map((view) => (
             <PanelistColumn
               key={view.panelist.id}
+              state={state}
               view={view}
-              activeObjectiveId={objective?.id ?? null}
+              activeSlotId={round?.id ?? null}
               highlightFindingId={justSold?.findingId ?? null}
               onOpenFinding={onOpenFinding}
             />
@@ -107,7 +113,7 @@ export function AuctionMode({
           <div className="scroll-fade flex min-h-0 flex-1 flex-col gap-[0.5em] overflow-y-auto pr-[0.25em]">
             {available.length === 0 ? (
               <p className="text-paper-faint py-[2em] text-center text-[0.8125em]">
-                No findings remaining.
+                No {words.itemPlural} remaining.
               </p>
             ) : (
               available.map((view) => (
@@ -127,17 +133,11 @@ export function AuctionMode({
   );
 }
 
-function RoundPips({
-  objectives,
-  current,
-}: {
-  objectives: { id: string; shortName: string }[];
-  current: number;
-}) {
+function RoundPips({ slots, current }: { slots: Slot[]; current: number }) {
   return (
     <ol className="flex shrink-0 gap-[0.5em]">
-      {objectives.map((objective, index) => (
-        <li key={objective.id} className="flex flex-col items-center gap-[0.4em]">
+      {slots.map((slot, index) => (
+        <li key={slot.id} className="flex flex-col items-center gap-[0.4em]">
           <span
             className={cx(
               "h-[0.25em] w-[3em] rounded-full",
@@ -150,7 +150,7 @@ function RoundPips({
               index === current ? "text-signal" : "text-paper-faint",
             )}
           >
-            {objective.shortName}
+            {slot.shortName}
           </span>
         </li>
       ))}
@@ -159,13 +159,15 @@ function RoundPips({
 }
 
 function PanelistColumn({
+  state,
   view,
-  activeObjectiveId,
+  activeSlotId,
   highlightFindingId,
   onOpenFinding,
 }: {
+  state: EventState;
   view: PanelistView;
-  activeObjectiveId: string | null;
+  activeSlotId: string | null;
   highlightFindingId: string | null;
   onOpenFinding: (view: FindingView) => void;
 }) {
@@ -207,23 +209,27 @@ function PanelistColumn({
         </div>
       </header>
 
-      {/* Slots share the card height evenly, so the five objectives read as a
-          fixed roster rather than a list that happens to be short. */}
+      {/* Slots share the card height evenly, so the roster reads as fixed
+          positions rather than a list that happens to be short. */}
       <ol className="flex min-h-0 flex-1 flex-col gap-[0.35em] p-[0.6em]">
-        {slots.map((slot) => {
-          const isActive = slot.objective.id === activeObjectiveId && !slot.transaction;
-          const isNew = slot.finding?.id === highlightFindingId;
+        {slots.map((entry) => {
+          const { slot, finding, transaction, breakout } = entry;
+          const isActive = slot.id === activeSlotId && !transaction;
+          const isNew = finding?.id === highlightFindingId;
+          // Coloured by what was bought, not by the position it fills, so the
+          // spread of a portfolio is readable at a glance.
+          const category = finding ? findingCategory(state, finding) : null;
 
           return (
             <li
-              key={slot.objective.id}
-              data-type={slot.finding?.type}
+              key={slot.id}
+              data-accent={category?.accent}
               className={cx(
                 // flex-1 without overflow-hidden: slots share the spare height,
                 // but min-height:auto still floors each one at its content, so a
                 // filled slot never clips its headline.
                 "flex flex-1 flex-col rounded-sm px-[0.5em] py-[0.45em] transition-colors",
-                slot.transaction
+                transaction
                   ? "type-bar bg-ink-700"
                   : isActive
                     ? "border-signal/50 bg-signal/[0.06] border border-dashed"
@@ -237,38 +243,28 @@ function PanelistColumn({
                   isActive ? "text-signal" : "text-paper-faint",
                 )}
               >
-                {slot.objective.name}
+                {slot.name}
               </p>
 
-              {slot.finding && slot.transaction ? (
+              {finding && transaction ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    onOpenFinding({
-                      finding: slot.finding!,
-                      breakout: slot.breakout,
-                      transaction: slot.transaction,
-                      panelist: view.panelist,
-                      objective: slot.objective,
-                      isDrafted: true,
-                      isAvailable: false,
-                    })
-                  }
+                  onClick={() => onOpenFinding(buildFindingView(state, finding))}
                   className="mt-[0.3em] w-full text-left"
                 >
                   {/* Two lines, not three: five filled slots plus the budget
                       header have to fit the card at 16:9. The full headline is
                       on the right-hand pool and in the detail panel. */}
                   <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">
-                    {slot.finding.headline}
+                    {finding.headline}
                   </p>
                   <p className="mt-[0.3em] flex items-center gap-[0.4em]">
                     <span className="type-text font-mono text-[0.5625em] font-semibold tracking-[0.1em] uppercase">
-                      {slot.breakout?.shortName}
+                      {breakout?.shortName}
                     </span>
                     <span className="text-paper-faint">·</span>
                     <span className="tabular text-signal font-mono text-[0.625em] font-bold">
-                      {slot.transaction.price}
+                      {transaction.price}
                     </span>
                   </p>
                 </button>
