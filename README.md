@@ -123,6 +123,12 @@ count of how many people have submitted.
 Each person scans it, enters their name, picks one of the panel's **roles**, and spends their own
 credits across the board — the same exercise, from the same brief, at the same time.
 
+Twenty-five findings do not fit on a phone as a list, so they arrive folded into **collapsible
+groups**, one open at a time. A *Group by* switch offers two cuts: **Session**, which is how the
+room heard them, and **Finding type**, which puts every Fragility next to every other one.
+Tapping a finding opens the breakout's full record underneath it — what changed, the evidence,
+why it matters, the confidence, and any dissenting view — without losing your place in the list.
+
 The **Audience** tab is your view of it: the code to hold up if a table cannot find it, the
 counts, the room-versus-panel table in reading order, and the roster if you need to remove a
 duplicate or a test entry.
