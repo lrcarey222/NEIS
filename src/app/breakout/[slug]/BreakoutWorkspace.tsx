@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FindingCard } from "@/components/FindingCard";
 import { FindingDetail } from "@/components/FindingDetail";
 import { Logo } from "@/components/Logo";
+import { PhaseStrip } from "@/components/PhaseStrip";
 import { PinGate } from "@/components/PinGate";
 import { CountdownDisplay } from "@/components/Timer";
 import { Notice, StatusDot, cx } from "@/components/primitives";
@@ -192,6 +193,11 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
           </button>
         </div>
       </header>
+
+      {/* Above the cards, because the room that leaves the writing until the
+          end is the biggest risk in the day and the instruction at minute 35
+          has to be impossible to miss. */}
+      <PhaseStrip state={state} />
 
       {error ? (
         <div className="mb-6">
@@ -615,18 +621,19 @@ function FieldLabel({
   hint?: string;
   children: React.ReactNode;
 }) {
+  // `.label` sets display:block from an unlayered rule, which beats a `flex`
+  // utility on the same element — hence the inner wrapper rather than making
+  // the label itself the flex container.
   return (
-    <label className="label flex items-baseline gap-2" htmlFor={htmlFor}>
-      <span>{children}</span>
-      {required ? (
-        <span className="text-signal font-mono text-[0.5625rem] tracking-[0.12em]">
-          REQUIRED
-        </span>
-      ) : hint ? (
-        <span className="text-paper-faint font-mono text-[0.5625rem] tracking-[0.12em] uppercase">
-          {hint}
-        </span>
-      ) : null}
+    <label className="label" htmlFor={htmlFor}>
+      <span className="flex flex-wrap items-baseline gap-x-2">
+        <span>{children}</span>
+        {required ? (
+          <span className="text-signal text-[0.5625rem] tracking-[0.12em]">Required</span>
+        ) : hint ? (
+          <span className="text-paper-faint text-[0.5625rem] tracking-[0.12em]">{hint}</span>
+        ) : null}
+      </span>
     </label>
   );
 }
