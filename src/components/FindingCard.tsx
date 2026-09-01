@@ -16,14 +16,21 @@ export function FindingCard({
   onOpen,
   compact = false,
   soldAnimation = false,
+  showBreakout = false,
 }: {
   view: FindingView;
   onOpen?: (view: FindingView) => void;
   compact?: boolean;
   /** Play the "leaving the board" animation — set briefly after a sale. */
   soldAnimation?: boolean;
+  /**
+   * Name the room instead of the rank. For the auction pool, which is already
+   * grouped by rank: there the room is the thing you cannot otherwise tell,
+   * and the rank is written above the card.
+   */
+  showBreakout?: boolean;
 }) {
-  const { finding, isDrafted, panelist, transaction } = view;
+  const { breakout, finding, isDrafted, panelist, transaction } = view;
   const interactive = Boolean(onOpen);
 
   return (
@@ -90,7 +97,13 @@ export function FindingCard({
           compact ? "mt-[0.35em] gap-x-[0.7em]" : "mt-2.5 gap-x-3",
         )}
       >
-        <RankTag rank={finding.breakoutRank} />
+        {showBreakout && breakout ? (
+          <span className="text-paper-dim truncate font-mono text-[0.625em] font-semibold tracking-[0.1em] uppercase">
+            {breakout.shortName}
+          </span>
+        ) : (
+          <RankTag rank={finding.breakoutRank} />
+        )}
         <ConfidenceTag level={finding.confidence} />
       </div>
 

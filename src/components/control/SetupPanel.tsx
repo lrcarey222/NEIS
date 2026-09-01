@@ -19,10 +19,20 @@ import {
   submitAllBreakouts,
   type Result,
 } from "@/lib/actions";
-import { roundCount, sortedBreakouts, sortedPanelists } from "@/lib/derive";
+import {
+  auctionFindings,
+  roundCount,
+  sortedBreakouts,
+  sortedPanelists,
+} from "@/lib/derive";
 import { adminPin } from "@/lib/localAuth";
 import { currentMode } from "@/lib/net";
-import { DEFAULT_ROLES, defaultPromptForRole, type EventState } from "@/lib/types";
+import {
+  AUCTION_RANK_LIMIT,
+  DEFAULT_ROLES,
+  defaultPromptForRole,
+  type EventState,
+} from "@/lib/types";
 
 /** Pre-event configuration, plus the reset/demo tools used for rehearsal. */
 export function SetupPanel({ state }: { state: EventState }) {
@@ -144,6 +154,13 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
   const locked = state.transactions.length > 0;
   const rounds = roundCount(state);
 
+  // Only each room's top three are for sale, so the board is finite in a way it
+  // did not used to be: seats x rounds can now exceed it. Caught here, while it
+  // is a number in a form, rather than in front of the room when the last
+  // panelist has nothing left to bid on.
+  const pool = auctionFindings(state).length;
+  const demand = state.panelists.length * rounds;
+
   return (
     <Card title="Event" hint="Shown across the top of the big screen.">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -185,7 +202,7 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
           label="Rounds"
           type="number"
           value={rounds}
-          hint={`Each panelist ends up holding ${rounds} finding${rounds === 1 ? "" : "s"}. They may pick any finding, for any reason — their role is the brief, not a rule.`}
+          hint={`Each panelist ends up holding ${rounds} finding${rounds === 1 ? "" : "s"}, from the ${pool} on the board — each room's top ${AUCTION_RANK_LIMIT}. They may pick any of them, for any reason: their role is the brief, not a rule.`}
           onCommit={(value) => void setRoundCount(state, Number(value)).then(notify)}
         />
         <div className="self-end">
@@ -198,6 +215,17 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
           </p>
         </div>
       </div>
+
+      {pool > 0 && demand > pool ? (
+        <div className="mt-4">
+          <Notice tone="warn">
+            {state.panelists.length} panelists × {rounds} rounds needs {demand} findings,
+            but only {pool} are on the board — each room&apos;s top {AUCTION_RANK_LIMIT}.
+            Lower the rounds, or the last {demand - pool} pick
+            {demand - pool === 1 ? "" : "s"} will have nothing to bid on.
+          </Notice>
+        </div>
+      ) : null}
 
       <div className="border-ink-500 mt-4 space-y-2 border-t pt-4">
         <Toggle

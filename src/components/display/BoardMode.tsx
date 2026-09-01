@@ -80,11 +80,10 @@ function FullBoard({
     });
   }, [state]);
 
-  const totalSubmitted = columns.reduce((sum, c) => sum + c.findings.length, 0);
-  const drafted = columns.reduce(
-    (sum, c) => sum + c.findings.filter((f) => f.isDrafted).length,
-    0,
-  );
+  const all = columns.flatMap((c) => c.findings);
+  const totalSubmitted = all.length;
+  const inAuction = all.filter((v) => v.inAuction).length;
+  const drafted = all.filter((v) => v.isDrafted).length;
 
   if (totalSubmitted === 0) {
     return (
@@ -133,7 +132,7 @@ function FullBoard({
           </h2>
         </div>
         <p className="text-paper-mute tabular font-mono text-[0.75em] tracking-[0.1em] uppercase">
-          <span className="text-signal">{totalSubmitted - drafted}</span> available
+          <span className="text-signal">{inAuction - drafted}</span> in the auction
           <span className="text-paper-faint"> / </span>
           {drafted} drafted
         </p>
@@ -159,13 +158,23 @@ function FullBoard({
               {findings.length === 0 ? (
                 <EmptyState title="Awaiting submission" />
               ) : (
-                findings.map((view) => (
-                  <FindingCard
-                    key={view.finding.id}
-                    view={view}
-                    onOpen={onOpenFinding}
-                    compact
-                  />
+                findings.map((view, index) => (
+                  <div key={view.finding.id} className="contents">
+                    {/* The line the rooms' ranking draws. Everything above it
+                        goes to auction; everything below it is on the record and
+                        in the pack, but not for sale. Drawn here rather than left
+                        implicit so a room can see the consequence of its own
+                        ordering while it can still change it. */}
+                    {!view.inAuction && findings[index - 1]?.inAuction ? (
+                      <p className="text-paper-faint mt-[0.35em] flex items-center gap-[0.5em] font-mono text-[0.5em] tracking-[0.14em] whitespace-nowrap uppercase">
+                        Not in the auction
+                        <span className="bg-ink-500 h-px flex-1" />
+                      </p>
+                    ) : null}
+                    <div className={cx(!view.inAuction && "opacity-55")}>
+                      <FindingCard view={view} onOpen={onOpenFinding} compact />
+                    </div>
+                  </div>
                 ))
               )}
             </div>
