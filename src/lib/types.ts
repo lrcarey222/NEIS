@@ -134,6 +134,16 @@ export interface Segment {
   plannedMinutes: number;
   displayMode: SegmentKind;
   phases?: Phase[];
+  /**
+   * Puts the play-along QR code on the segment's title card.
+   *
+   * For the stretches where the room is doing nothing but moving — the
+   * transition and seating in particular — the projector's most useful job is
+   * getting phones onto /play before the draft starts, rather than after it.
+   * Only honoured by the `card` display mode; every other mode carries the
+   * code, or deliberately doesn't, on its own terms.
+   */
+  audienceQr?: boolean;
   /** Runs the hard-timed per-presenter sub-clock. See lib/schedule.ts. */
   presentationTimer?: boolean;
   /** Seconds each presenter gets. Defaults to 150. */

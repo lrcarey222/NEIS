@@ -194,6 +194,7 @@ function normaliseSegment(segment: Partial<Segment>, id: string): Segment {
     plannedMinutes: Math.max(0, Number(segment.plannedMinutes) || 0),
     displayMode: segment.displayMode ?? "card",
     phases,
+    audienceQr: segment.audienceQr ?? false,
     presentationTimer: segment.presentationTimer ?? false,
     presentationSeconds: Number(segment.presentationSeconds) || 150,
     presenterCount: Math.max(0, Number(segment.presenterCount) || 0),

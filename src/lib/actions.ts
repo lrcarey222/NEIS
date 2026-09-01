@@ -380,6 +380,7 @@ export type SegmentPatch = Partial<
     | "plannedStart"
     | "plannedMinutes"
     | "displayMode"
+    | "audienceQr"
     | "presentationTimer"
     | "presentationSeconds"
     | "presenterCount"
@@ -421,6 +422,7 @@ export async function createSegment(state: EventState): Promise<Result> {
     plannedMinutes: 10,
     displayMode: "card",
     phases: [],
+    audienceQr: false,
     presentationTimer: false,
     presentationSeconds: 150,
     presenterCount: 0,

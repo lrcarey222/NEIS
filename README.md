@@ -132,7 +132,7 @@ Every new event arrives with this. Edit it on the Run of Show tab.
 | 2 | 8:45 | 55 | Where Do Things Stand Today | Segment card |
 | 3 | 9:40 | 10 | Move to Breakout Rooms | Instructions |
 | 4 | 9:50 | 75 | Breakout Sessions — seven phases | Findings board |
-| 5 | 11:05 | 10 | Transition and Seating | Instructions |
+| 5 | 11:05 | 10 | Transition and Seating | Segment card + play-along QR |
 | 6 | 11:15 | 15 | Breakout Presentations — 5 × 2:30, hard-timed | Findings board |
 | 7 | 11:30 | 5 | Panel Questions | Findings board |
 | 8 | 11:35 | 35 | Strategic Findings Auction | Live auction |
@@ -163,6 +163,14 @@ The **Run of Show tab** is everything that is not the clock:
 The **Segment card** display mode projects the live segment: title large, description,
 speakers, and a big clock. This is what fills 8:30–9:40, where the projector previously
 had nothing useful to show.
+
+A segment card can also carry the **play-along QR code** — a checkbox per segment on the
+Run of Show tab, seeded on **Transition and Seating**. Those ten minutes at 11:05 are the
+only stretch of the day when the whole room is standing up with a phone in its hand and
+nothing to do, which makes them the best chance the audience draft gets at a crowd. The
+code goes up whether or not the play-along is open yet: a phone that scans early is told
+to keep the page open, and it unlocks itself when you open the draft. The panel shows how
+many people are in, so you can see the room arriving from the front.
 
 The **agenda strip** is available under every display mode — a thin band showing the day
 with the current segment marked and past ones dimmed. It answers "where are we" and "when

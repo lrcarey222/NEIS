@@ -214,10 +214,14 @@ export function createRunOfShow(): ScheduleState {
     {
       id: "sg-seating",
       title: "Transition and Seating",
-      description: "Back to the main room. Presenters to the front.",
+      description:
+        "Back to the main room. Presenters to the front — everyone else, scan the code and play along.",
       plannedStart: "11:05",
       plannedMinutes: 10,
-      displayMode: "instructions",
+      displayMode: "card",
+      audienceQr: true,
+      operatorNotes:
+        "Open the play-along on the Audience tab before this segment, so the codes people scan here land on a live page.",
     },
     {
       id: "sg-presentations",
