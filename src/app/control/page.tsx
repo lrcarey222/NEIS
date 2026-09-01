@@ -187,6 +187,9 @@ export default function ControlPage() {
               Audience CSV
             </button>
           ) : null}
+          <a className="btn btn-ghost" href="../agenda/" target="_blank" rel="noreferrer">
+            Agenda ↗
+          </a>
           <a className="btn btn-ghost" href="../summary/" target="_blank" rel="noreferrer">
             Printable summary ↗
           </a>

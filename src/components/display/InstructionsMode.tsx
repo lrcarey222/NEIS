@@ -169,6 +169,18 @@ export function InstructionsMode({ state }: { state: EventState }) {
               </p>
             </div>
           ) : null}
+
+          {/* The agenda, alongside the breakout codes, so the answer to "when
+              is lunch" is on somebody's phone rather than shouted. */}
+          {state.runOfShow.segments.length > 0 ? (
+            <div className="border-ink-500 mt-[0.6em] flex items-center gap-[0.6em] border-t pt-[0.6em]">
+              <QrCode url={site.link("agenda")} className="w-[4em] shrink-0 p-[0.2em]" />
+              <p className="text-paper-mute text-[0.6875em] leading-snug">
+                <span className="text-paper-dim font-semibold">The run of show.</span> Scan
+                for today&apos;s agenda on your phone — it updates live as the session runs.
+              </p>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

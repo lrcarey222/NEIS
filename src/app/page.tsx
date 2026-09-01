@@ -104,7 +104,12 @@ export default function LandingPage() {
 
       <section>
         <h2 className="eyebrow mb-4">Screens</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <LinkCard
+            href="agenda/"
+            title="Run of show"
+            hint="Today's agenda on a phone, updating live as the session runs. No PIN."
+          />
           <LinkCard
             href="display/"
             title="Big screen display"
