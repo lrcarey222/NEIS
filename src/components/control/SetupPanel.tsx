@@ -517,6 +517,10 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
   const armed = confirm.toUpperCase() === "RESET";
 
   return (
+    // A new event takes the current default round count, not this event's.
+    // Carrying it over meant one event set to five rounds propagated five into
+    // every event created from it afterwards, and "the default" was whatever
+    // the last person happened to type.
     <Card
       title="Event lifecycle"
       hint="Rehearse freely here before the session, then create the live event."
@@ -525,24 +529,36 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
         <Action
           label="Seed empty finding templates"
           hint="Gives every breakout its five blank cards. Skips rooms that already have findings."
-          onClick={() => void seedBlankFindings(state).then(notify)}
+          done="Blank cards seeded."
+          onRun={() => seedBlankFindings(state)}
         />
         <Action
           label="Submit all breakouts"
           hint="Publishes everything currently written to the board — useful mid-rehearsal."
-          onClick={() => void submitAllBreakouts(state).then(notify)}
+          done={`All ${state.breakouts.length} breakouts submitted.`}
+          onRun={() => submitAllBreakouts(state)}
         />
         <Action
           label="Reset the auction"
-          hint="Clears every transaction and returns to Round 0. Keeps all findings."
+          hint={`Clears all ${state.transactions.length} transactions and returns to Round 0. Keeps all findings.`}
+          done={`Auction reset — ${state.transactions.length} transactions cleared.`}
           tone="danger"
-          onClick={() => void resetAuction().then(notify)}
+          onRun={resetAuction}
         />
         <Action
           label="Clear the audience play-along"
-          hint={`Removes all ${state.audience.length} entries. Run this between the rehearsal and the real session.`}
+          hint={
+            state.audience.length === 0
+              ? "No entries to remove. Run this between the rehearsal and the real session."
+              : `Removes all ${state.audience.length} entries, and signs out every phone still holding one.`
+          }
+          done={
+            state.audience.length === 0
+              ? "Nothing to clear — the play-along was already empty."
+              : `Cleared ${state.audience.length} entries.`
+          }
           tone="danger"
-          onClick={() => void clearAudience().then(notify)}
+          onRun={clearAudience}
         />
       </div>
 
@@ -578,7 +594,6 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
               void createNewEvent({
                 demo: true,
                 startingBudget: state.event.startingBudget,
-                roundCount: roundCount(state),
               }).then(notify)
             }
           >
@@ -593,7 +608,6 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
                 demo: false,
                 title: state.event.title,
                 startingBudget: state.event.startingBudget,
-                roundCount: roundCount(state),
               }).then(notify)
             }
           >
@@ -605,29 +619,96 @@ function DangerZone({ state, notify }: { state: EventState; notify: Notify }) {
   );
 }
 
+/**
+ * One button that does one thing, and says so afterwards.
+ *
+ * These used to fire on a single click and report only failures, so a
+ * destructive action that worked looked exactly like one that did nothing —
+ * which is how "clear the audience play-along" came to seem broken when it was
+ * in fact clearing an already-empty list. Now a `danger` action arms first, and
+ * every run reports what happened either way.
+ */
 function Action({
   label,
   hint,
-  onClick,
+  onRun,
+  done,
   tone = "ghost",
 }: {
   label: string;
   hint: string;
-  onClick: () => void;
+  onRun: () => Promise<Result>;
+  /** Success line. Written by the caller, because only it knows what changed. */
+  done: string;
   tone?: "ghost" | "danger";
 }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // The confirm step is not a modal: a second click on the same button is
+  // faster under time pressure and cannot be dismissed by accident.
+  const needsConfirm = tone === "danger";
+
+  useEffect(() => {
+    if (!status) return;
+    const timeout = setTimeout(() => setStatus(null), 6000);
+    return () => clearTimeout(timeout);
+  }, [status]);
+
+  // Disarm if the operator walks away rather than leaving a primed button.
+  useEffect(() => {
+    if (!armed) return;
+    const timeout = setTimeout(() => setArmed(false), 5000);
+    return () => clearTimeout(timeout);
+  }, [armed]);
+
+  async function run() {
+    if (needsConfirm && !armed) {
+      setArmed(true);
+      setStatus(null);
+      return;
+    }
+    setArmed(false);
+    setBusy(true);
+    const result = await onRun();
+    setBusy(false);
+    setStatus(
+      result.ok
+        ? { ok: true, text: done }
+        : { ok: false, text: result.error ?? "Something went wrong." },
+    );
+  }
+
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
         <p className="text-paper text-sm">{label}</p>
-        <p className="text-paper-faint text-xs">{hint}</p>
+        {status ? (
+          <p
+            className={cx(
+              "text-xs font-medium",
+              status.ok ? "text-momentum" : "text-fragility",
+            )}
+            role="status"
+          >
+            {status.ok ? "✓ " : "✗ "}
+            {status.text}
+          </p>
+        ) : (
+          <p className="text-paper-faint text-xs">{hint}</p>
+        )}
       </div>
       <button
         type="button"
-        className={cx("btn shrink-0", tone === "danger" ? "btn-danger" : "btn-ghost")}
-        onClick={onClick}
+        className={cx(
+          "btn shrink-0",
+          armed || tone === "danger" ? "btn-danger" : "btn-ghost",
+        )}
+        disabled={busy}
+        onClick={() => void run()}
       >
-        Run
+        {busy ? "Working…" : armed ? "Confirm" : "Run"}
       </button>
     </div>
   );

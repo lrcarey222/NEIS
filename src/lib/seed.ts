@@ -109,13 +109,28 @@ export const PANELIST_BLUEPRINT: Omit<Panelist, "startingBudget">[] =
 export const DEFAULT_ROUND_COUNT = 3;
 
 /**
- * What a schema 1 event ran, before `roundCount` existed.
+ * What an event with no stored `roundCount` should run.
  *
- * Deliberately a separate constant from the default above: those events had
- * five strategic objectives and therefore five picks, and lowering the new
- * default must not retroactively shrink a portfolio someone already drafted.
+ * The concern this exists for is real — a schema 1 event had five strategic
+ * objectives and so five picks, and lowering the default must not retroactively
+ * shrink a portfolio somebody already drafted. But answering it with a flat 5
+ * was wrong in the common case: an event that simply predates the field and has
+ * drafted nothing came back as a five-round auction, and no amount of changing
+ * `DEFAULT_ROUND_COUNT` fixed it.
+ *
+ * So read it off the data instead of guessing. Nobody's picks are dropped,
+ * because the count is floored at the most anyone actually holds; every other
+ * event gets today's default.
  */
-export const LEGACY_ROUND_COUNT = 5;
+export function roundCountForLegacyEvent(
+  transactions: { panelistId: string }[],
+): number {
+  const held = new Map<string, number>();
+  for (const transaction of transactions) {
+    held.set(transaction.panelistId, (held.get(transaction.panelistId) ?? 0) + 1);
+  }
+  return Math.max(DEFAULT_ROUND_COUNT, ...held.values(), 0);
+}
 
 // --- The run of show -------------------------------------------------------
 
