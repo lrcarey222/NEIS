@@ -85,14 +85,14 @@ export default function PlayPage() {
   }
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-2xl px-4 py-6">
-      <header className="mb-6">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <Logo className="text-paper h-7 w-auto" />
+    <main className="mx-auto min-h-dvh w-full max-w-2xl px-3 py-4 sm:px-4 sm:py-6">
+      <header className="mb-4 sm:mb-6">
+        <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4">
+          <Logo className="text-paper h-6 w-auto sm:h-7" />
           <StatusDot status={status} />
         </div>
         <p className="eyebrow">Play along</p>
-        <h1 className="text-paper mt-1 text-2xl leading-tight font-medium">
+        <h1 className="text-paper mt-1 text-xl leading-tight font-medium text-balance sm:text-2xl">
           {state.event.title}
         </h1>
       </header>
@@ -357,12 +357,21 @@ function Allocator({
       .filter((group) => group.findings.length > 0);
   }, [state, groupBy]);
 
-  // One group open at a time, so the page never grows back into a long list.
-  // Re-seeded whenever the cut changes, because the old key means nothing.
+  /**
+   * One group open at a time, and everything closed to begin with.
+   *
+   * Closed-by-default costs one tap and buys the thing a phone cannot
+   * otherwise have: the whole board — every session, or every finding type,
+   * with what you have already spent on each — visible without scrolling.
+   * Opening one on arrival pushed the other four a screenful of findings down
+   * the page, which is exactly the scrolling this is meant to avoid.
+   *
+   * Reset whenever the cut changes, because the old key means nothing.
+   */
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   useEffect(() => {
-    setOpenGroup(groups[0]?.key ?? null);
-  }, [groups]);
+    setOpenGroup(null);
+  }, [groupBy]);
 
   const spent = Object.values(allocations).reduce((sum, value) => sum + value, 0);
   const remaining = budget - spent;
@@ -429,11 +438,11 @@ function Allocator({
 
       {/* The balance follows the thumb down the page — it is the only number
           that matters while allocating, and it must never scroll away. */}
-      <div className="bg-ink-900 sticky top-0 z-10 -mx-4 px-4 py-3">
+      <div className="bg-ink-900 sticky top-0 z-10 -mx-3 px-3 py-2 sm:-mx-4 sm:px-4 sm:py-3">
         <div className="panel p-3">
           <div className="flex items-baseline justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-paper-faint font-mono text-[0.625rem] tracking-[0.12em] uppercase">
+              <p className="text-paper-faint truncate font-mono text-[0.625rem] tracking-[0.12em] uppercase">
                 {entry.name}
                 {entry.role ? <span className="text-signal"> · {entry.role}</span> : null}
               </p>
@@ -465,12 +474,12 @@ function Allocator({
       </div>
 
       {role?.prompt ? (
-        <p className="text-paper-mute px-1 text-sm leading-relaxed italic">
+        <p className="text-paper-mute text-sm leading-relaxed italic">
           &ldquo;{role.prompt}&rdquo;
         </p>
       ) : null}
 
-      <div className="flex items-center gap-2 px-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="text-paper-faint font-mono text-[0.625rem] tracking-[0.12em] uppercase">
           Group by
         </span>
@@ -479,8 +488,9 @@ function Allocator({
             key={option}
             type="button"
             onClick={() => setGroupBy(option)}
+            aria-pressed={groupBy === option}
             className={cx(
-              "rounded-sm border px-2.5 py-1 font-mono text-[0.625rem] font-semibold tracking-[0.1em] uppercase transition-colors",
+              "min-h-9 rounded-sm border px-3 py-1.5 font-mono text-[0.625rem] font-semibold tracking-[0.1em] uppercase transition-colors",
               groupBy === option
                 ? "border-signal bg-signal text-ink-900"
                 : "border-ink-400 text-paper-mute",
@@ -502,14 +512,34 @@ function Allocator({
           return (
             <section
               key={group.key}
+              id={`group-${group.key}`}
               data-type={group.accentType}
-              className={cx("panel overflow-hidden", group.accentType && "type-bar")}
+              // Cleared of the sticky balance bar when a newly-opened group
+              // scrolls itself into view.
+              className={cx(
+                "panel scroll-mt-28 overflow-hidden",
+                group.accentType && "type-bar",
+                isOpen && "border-signal/45",
+              )}
             >
               <button
                 type="button"
-                className="flex w-full items-center gap-3 p-3 text-left"
-                onClick={() => setOpenGroup(isOpen ? null : group.key)}
+                className="flex min-h-14 w-full items-center gap-3 p-3 text-left"
+                onClick={() => {
+                  const next = isOpen ? null : group.key;
+                  setOpenGroup(next);
+                  // Opening one closes another, which can leave the header you
+                  // just tapped somewhere above the fold.
+                  if (next) {
+                    requestAnimationFrame(() =>
+                      document
+                        .getElementById(`group-${next}`)
+                        ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+                    );
+                  }
+                }}
                 aria-expanded={isOpen}
+                aria-controls={`group-body-${group.key}`}
               >
                 <span className="min-w-0 flex-1">
                   <span className="text-paper block text-sm leading-snug font-semibold">
@@ -523,16 +553,17 @@ function Allocator({
                     ) : null}
                   </span>
                 </span>
-                <span
-                  aria-hidden="true"
-                  className="text-paper-faint shrink-0 font-mono text-lg leading-none"
-                >
-                  {isOpen ? "−" : "+"}
-                </span>
+                <Caret
+                  open={isOpen}
+                  className={cx("size-4", isOpen ? "text-signal" : "text-paper-mute")}
+                />
               </button>
 
               {isOpen ? (
-                <div className="border-ink-500 space-y-2 border-t p-2">
+                <div
+                  id={`group-body-${group.key}`}
+                  className="border-ink-500 space-y-2 border-t p-2"
+                >
                   {group.hint ? (
                     <p className="text-paper-mute px-1 pt-1 text-xs leading-relaxed">
                       {group.hint}
@@ -559,7 +590,7 @@ function Allocator({
         })}
       </div>
 
-      <div className="border-ink-500 sticky bottom-0 -mx-4 border-t bg-[color:var(--color-ink-900)] px-4 py-3">
+      <div className="border-ink-500 bg-ink-900 sticky bottom-0 -mx-3 border-t px-3 py-3 sm:-mx-4 sm:px-4">
         <button
           type="button"
           className="btn btn-primary w-full py-3 text-base"
@@ -636,24 +667,25 @@ function AllocationRow({
       )}
     >
       {/* The whole heading is the target — a 12px "More" link is not something
-          to ask a thumb to find in a dim room. */}
+          to ask a thumb to find in a dim room. The chips sit on their own line
+          rather than beside the toggle: "Underappreciated opportunity" is wider
+          than a 320px handset leaves for a chip sharing a row. */}
       <button
         type="button"
         className="w-full text-left"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
-        <span className="mb-2 flex items-start justify-between gap-2">
-          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {showType ? <TypeChip type={finding.type} /> : null}
-            {showBreakout && breakout ? (
-              <span className="text-paper-mute border-ink-400 rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] font-semibold tracking-[0.1em] uppercase">
-                {breakout.shortName}
-              </span>
-            ) : null}
-          </span>
-          <span className="text-paper-faint shrink-0 font-mono text-[0.625rem] tracking-[0.1em] uppercase">
-            {expanded ? "Hide −" : "Detail +"}
+        <span className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          {showType ? <TypeChip type={finding.type} /> : null}
+          {showBreakout && breakout ? (
+            <span className="text-paper-mute border-ink-400 rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] font-semibold tracking-[0.1em] uppercase">
+              {breakout.shortName}
+            </span>
+          ) : null}
+          <span className="text-paper-faint ml-auto flex items-center gap-1 font-mono text-[0.5625rem] tracking-[0.1em] uppercase">
+            {expanded ? "Hide" : "Detail"}
+            <Caret open={expanded} />
           </span>
         </span>
 
@@ -697,41 +729,46 @@ function AllocationRow({
         </div>
       ) : null}
 
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-ghost h-11 w-11 shrink-0 text-lg"
-          disabled={credits === 0}
-          onClick={() => onChange((value) => value - STEP)}
-          aria-label={`Remove ${STEP} credits from ${finding.headline}`}
-        >
-          −
-        </button>
-        <input
-          className="field tabular h-11 w-20 shrink-0 text-center text-lg font-bold"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          value={credits}
-          aria-label={`Credits on ${finding.headline}`}
-          onChange={(event) => {
-            const typed = Number(event.target.value);
-            onChange(() => typed);
-          }}
-        />
-        <button
-          type="button"
-          className="btn btn-ghost h-11 w-11 shrink-0 text-lg"
-          disabled={remaining === 0}
-          onClick={() => onChange((value) => value + STEP)}
-          aria-label={`Add ${STEP} credits to ${finding.headline}`}
-        >
-          +
-        </button>
+      {/* Steppers first and fixed-width, the number elastic between them, and
+          "All" allowed to wrap onto its own line. Nothing in this row can push
+          the + control off the side of a narrow screen. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="flex min-w-40 flex-1 items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost h-11 w-11 shrink-0 px-0 text-lg"
+            disabled={credits === 0}
+            onClick={() => onChange((value) => value - STEP)}
+            aria-label={`Remove ${STEP} credits from ${finding.headline}`}
+          >
+            −
+          </button>
+          <input
+            className="field tabular no-spin h-11 w-full min-w-0 flex-1 px-1 text-center text-lg font-bold"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={credits}
+            aria-label={`Credits on ${finding.headline}`}
+            onChange={(event) => {
+              const typed = Number(event.target.value);
+              onChange(() => typed);
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-ghost h-11 w-11 shrink-0 px-0 text-lg"
+            disabled={remaining === 0}
+            onClick={() => onChange((value) => value + STEP)}
+            aria-label={`Add ${STEP} credits to ${finding.headline}`}
+          >
+            +
+          </button>
+        </div>
         {remaining > 0 ? (
           <button
             type="button"
-            className="btn btn-ghost ml-auto shrink-0 text-xs"
+            className="btn btn-ghost ml-auto h-11 shrink-0 text-xs"
             onClick={() => onChange((value, unspent) => value + unspent)}
           >
             All {remaining}
@@ -739,6 +776,33 @@ function AllocationRow({
         ) : null}
       </div>
     </article>
+  );
+}
+
+/**
+ * The open/closed marker on every disclosure on this page.
+ *
+ * A rotating caret rather than the +/− it replaced: the plus read as "add" on
+ * a screen whose other job is adding credits, and it sat close enough to the
+ * steppers to be mistaken for one.
+ */
+function Caret({ open, className }: { open: boolean; className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 12 12"
+      className={cx(
+        "size-3 shrink-0 transition-transform duration-150",
+        open && "rotate-180",
+        className,
+      )}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="square"
+    >
+      <path d="M2.5 4.5 6 8l3.5-3.5" />
+    </svg>
   );
 }
 
