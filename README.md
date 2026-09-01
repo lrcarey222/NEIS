@@ -383,8 +383,11 @@ corrections go through the operator.
 
 ## Event lifecycle
 
-`/control/` → **Setup** → **Event lifecycle**. Destructive actions require typing `RESET` first,
-because they act on **everyone** — including a breakout room mid-sentence.
+`/control/` → **Setup** → **Event lifecycle**. The two whole-event buttons require typing
+`RESET` first, because they act on **everyone** — including a breakout room mid-sentence.
+The red single-purpose actions arm on the first click and run on the second (**Run** →
+**Confirm**), and every action reports what it did underneath its own label — so an action
+that succeeded never looks the same as one that quietly failed.
 
 | Action | Effect |
 | --- | --- |
@@ -392,10 +395,14 @@ because they act on **everyone** — including a breakout room mid-sentence.
 | **Submit all breakouts** | Publishes everything currently written. Handy mid-rehearsal. |
 | **Reset the auction** | Clears all transactions, returns to Round 0, **keeps every finding**. Use this between the rehearsal auction and the real one. |
 | **Reset day** (Run of Show tab) | Clears the run-of-show clock and keeps the agenda. Use this between a rehearsal run and the real one. |
-| **Clear the audience play-along** | Removes every entry. Run this between the rehearsal and the real session. |
+| **Clear the audience play-along** | Removes every entry, and signs out every phone still holding one so it cannot re-post. Run this between the rehearsal and the real session. |
 | **Clear all findings** | Removes findings and transactions, keeps panelists and settings. |
 | **New demo event** | Wipes everything and reloads the 25 sample findings. For rehearsal. |
 | **New live event** | Wipes everything and starts empty. **Use this before the real session.** |
+
+> **A new event always starts at the default three rounds**, whatever the event you created
+> it from was set to. It used to inherit that number, so one event set to five quietly
+> propagated five into every event made from it afterwards.
 
 ## Rehearsing without touching the live event
 
