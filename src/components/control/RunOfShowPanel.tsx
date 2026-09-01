@@ -496,6 +496,19 @@ function SegmentRow({
           </label>
 
           <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+            {segment.displayMode === "card" ? (
+              <label className="text-paper-mute flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={segment.audienceQr ?? false}
+                  onChange={(event) =>
+                    void onPatch({ audienceQr: event.target.checked })
+                  }
+                />
+                Play-along QR on the card
+              </label>
+            ) : null}
+
             <label className="text-paper-mute flex items-center gap-2 text-xs">
               <input
                 type="checkbox"

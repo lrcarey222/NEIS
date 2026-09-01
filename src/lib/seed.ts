@@ -214,10 +214,14 @@ export function createRunOfShow(): ScheduleState {
     {
       id: "sg-seating",
       title: "Transition and Seating",
-      description: "Back to the main room. Presenters to the front.",
+      description:
+        "Back to the main room. Presenters to the front — everyone else, scan the code and play along.",
       plannedStart: "11:05",
       plannedMinutes: 10,
-      displayMode: "instructions",
+      displayMode: "card",
+      audienceQr: true,
+      operatorNotes:
+        "Open the play-along on the Audience tab before this segment, so the codes people scan here land on a live page.",
     },
     {
       id: "sg-presentations",
@@ -303,6 +307,16 @@ interface SeedFinding {
   evidence: string;
   whyItMatters: string;
   confidence: Finding["confidence"];
+  /**
+   * Deliberately *not* the same type order in every room.
+   *
+   * Only the top three go to auction (`AUCTION_RANK_LIMIT`), so a seed that
+   * ranked the five types identically everywhere would rehearse a board with
+   * no Underappreciated Opportunity and no Wildcard on it at all — and the
+   * play-along's group-by-type cut would show three groups instead of five.
+   * Each room here demotes a different pair, which is what real rooms ranking
+   * independently will produce.
+   */
   breakoutRank: number;
   dissent?: string;
 }
@@ -397,7 +411,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "It keeps assembly plants and supplier employment intact through the downturn, but defers the battery scale the US needs to compete later. Resilience now, disadvantage later.",
       confidence: "medium",
-      breakoutRank: 3,
+      breakoutRank: 4,
     },
     {
       type: "opportunity",
@@ -408,7 +422,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "If margin migrates from the powertrain to the software stack, the US position is stronger than the cell numbers suggest, and current policy is aimed at the wrong part of the vehicle.",
       confidence: "low",
-      breakoutRank: 4,
+      breakoutRank: 3,
     },
     {
       type: "wildcard",
@@ -443,7 +457,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "The entire clean firm investment case rests on a learning rate nobody has demonstrated. If the first repeat unit does not come in cheaper, the sector reprices in a quarter.",
       confidence: "high",
-      breakoutRank: 2,
+      breakoutRank: 5,
     },
     {
       type: "bottleneck",
@@ -476,7 +490,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "Sector confidence rests on projects not yet built. A single visible failure would reset financing terms for every developer, including those with different designs and better records.",
       confidence: "medium",
-      breakoutRank: 5,
+      breakoutRank: 2,
     },
   ],
   "bk-grid": [
@@ -489,7 +503,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "Public consent, not capital or capability, now determines build rates. An agenda that raises bills loses the authority it needs to keep building, and it loses it in both parties.",
       confidence: "high",
-      breakoutRank: 1,
+      breakoutRank: 2,
     },
     {
       type: "momentum",
@@ -500,7 +514,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "This is the mechanism that converts data centre demand from a grid problem into a grid resource. It moves faster than transmission construction and requires no new steel.",
       confidence: "medium",
-      breakoutRank: 2,
+      breakoutRank: 3,
     },
     {
       type: "bottleneck",
@@ -511,7 +525,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "Reform effort is concentrated where the constraint used to be. Clearing queues faster produces projects that then wait on a transformer, which no permitting bill addresses.",
       confidence: "high",
-      breakoutRank: 3,
+      breakoutRank: 4,
     },
     {
       type: "opportunity",
@@ -522,7 +536,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "Capital cannot be directed at headroom nobody measures. A reporting requirement costing almost nothing would unlock capacity that otherwise takes a decade and a rate case to build.",
       confidence: "medium",
-      breakoutRank: 4,
+      breakoutRank: 1,
     },
     {
       type: "wildcard",
@@ -568,7 +582,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "The tools that would compress interconnection timelines already exist. No regulatory mechanism lets a utility earn on buying them, so the bottleneck persists for institutional reasons.",
       confidence: "medium",
-      breakoutRank: 3,
+      breakoutRank: 4,
     },
     {
       type: "opportunity",
@@ -579,7 +593,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "Reindustrialisation depends on supplier productivity, not on flagship plants. If the gain accrues only to the largest firms, the cost gap with China closes at the top and nowhere else.",
       confidence: "medium",
-      breakoutRank: 4,
+      breakoutRank: 5,
     },
     {
       type: "wildcard",
@@ -590,7 +604,7 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       whyItMatters:
         "The sector treats quantum as an optimisation upside. The nearer-term consequence is that long-lived control systems being installed now will outlast the cryptography protecting them.",
       confidence: "low",
-      breakoutRank: 5,
+      breakoutRank: 3,
     },
   ],
 };

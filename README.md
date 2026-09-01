@@ -132,7 +132,7 @@ Every new event arrives with this. Edit it on the Run of Show tab.
 | 2 | 8:45 | 55 | Where Do Things Stand Today | Segment card |
 | 3 | 9:40 | 10 | Move to Breakout Rooms | Instructions |
 | 4 | 9:50 | 75 | Breakout Sessions — seven phases | Findings board |
-| 5 | 11:05 | 10 | Transition and Seating | Instructions |
+| 5 | 11:05 | 10 | Transition and Seating | Segment card + play-along QR |
 | 6 | 11:15 | 15 | Breakout Presentations — 5 × 2:30, hard-timed | Findings board |
 | 7 | 11:30 | 5 | Panel Questions | Findings board |
 | 8 | 11:35 | 35 | Strategic Findings Auction | Live auction |
@@ -163,6 +163,14 @@ The **Run of Show tab** is everything that is not the clock:
 The **Segment card** display mode projects the live segment: title large, description,
 speakers, and a big clock. This is what fills 8:30–9:40, where the projector previously
 had nothing useful to show.
+
+A segment card can also carry the **play-along QR code** — a checkbox per segment on the
+Run of Show tab, seeded on **Transition and Seating**. Those ten minutes at 11:05 are the
+only stretch of the day when the whole room is standing up with a phone in its hand and
+nothing to do, which makes them the best chance the audience draft gets at a crowd. The
+code goes up whether or not the play-along is open yet: a phone that scans early is told
+to keep the page open, and it unlocks itself when you open the draft. The panel shows how
+many people are in, so you can see the room arriving from the front.
 
 The **agenda strip** is available under every display mode — a thin band showing the day
 with the current segment marked and past ones dimmed. It answers "where are we" and "when
@@ -230,7 +238,11 @@ Facilitators cannot reopen their own room once submitted; that is deliberately y
 
 ## 3. During the auction
 
-Switch the big screen to **Live Auction**. On the **Auction** tab:
+Switch the big screen to **Live Auction**. The pool is **each room's top three** — fifteen cards,
+grouped on screen by room pick #1, #2, #3 rather than run as one long list. See
+[Auction rules](#auction-rules).
+
+On the **Auction** tab:
 
 1. Filter and click the **finding** the room just bid on
 2. Click the winning **panelist** — each button shows their role, picks so far, and credits left
@@ -256,9 +268,10 @@ the right-hand column of the **Live Auction** screen for as long as it stays ope
 count of how many people have submitted.
 
 Each person scans it, enters their name, picks one of the panel's **roles**, and spends their own
-credits across the board — the same exercise, from the same brief, at the same time.
+credits across the same fifteen the panel is bidding on — the same exercise, from the same brief,
+at the same time.
 
-Twenty-five findings do not fit on a phone as a list, so they arrive folded into **collapsible
+Fifteen findings do not fit on a phone as a list, so they arrive folded into **collapsible
 groups**, one open at a time. A *Group by* switch offers two cuts: **Session**, which is how the
 room heard them, and **Finding type**, which puts every Fragility next to every other one.
 Tapping a finding opens the breakout's full record underneath it — the evidence, why it matters,
@@ -339,7 +352,8 @@ a pasted paragraph cannot destroy the projected layout.
 > finding twice.
 
 - **Everything saves automatically when you leave a field.** There is no save button to forget.
-- The **↑/↓** buttons set your group's 1–5 ranking.
+- The **↑/↓** buttons set your group's 1–5 ranking. **Your top three go to the auction** — the
+  workspace draws the line under #3. All five stay on the board and in the record.
 - **Preview on board** shows the cards exactly as they will project.
 - Several people can work in the same room at once on different devices — each field saves
   independently, so you will not overwrite each other.
@@ -414,6 +428,22 @@ Enforced inside the database transaction and previewed live in the operator's fo
 implementation (`src/lib/derive.ts`) runs in both places, so the warning shown is exactly the
 rule applied.
 
+## What is on the board
+
+**Only each room's top three findings go to auction** — fifteen cards, not twenty-five. All five
+are still written, presented, projected on the Strategic Findings Board and kept in the record;
+the ranking decides which three the day actually bids on. The board draws the line explicitly:
+the facilitator's workspace shows *below the auction line* under #3, and the findings board dims
+what sits under it.
+
+Fifteen is exactly five panelists × three picks, so a full draft empties the board. If you change
+the round count or the number of seats so that seats × rounds exceeds the pool, Setup warns you —
+otherwise the last panelists have nothing left to bid on. `AUCTION_RANK_LIMIT` in
+`src/lib/types.ts` is the single place the three lives.
+
+The audience play-along offers the same fifteen, so the closing panel-versus-room comparison is
+over one shared pool.
+
 **Hard rules, never overridable:**
 
 - A panelist cannot spend more credits than they hold
@@ -421,9 +451,9 @@ rule applied.
 - A finding cannot be sold twice
 - Bids must be whole numbers, at or above the minimum bid
 
-**Deliberately not a rule:** nothing constrains *which* findings a panelist may combine. All five
-from one breakout, or all five Wildcards, is a legitimate portfolio. Judging it against the
-panelist's role is the exercise, and the app must not pre-empt that.
+**Deliberately not a rule:** nothing constrains *which* findings a panelist may combine. A whole
+room's three, or three Wildcards, is a legitimate portfolio. Judging it against the panelist's
+role is the exercise, and the app must not pre-empt that.
 
 **Advisory by default:**
 
@@ -431,6 +461,8 @@ panelist's role is the exercise, and the app must not pre-empt that.
   their remaining picks at the minimum bid. A bid that breaks that shows a warning but is
   allowed — a moderator may legitimately let someone go all-in. Setup → *Block bids that break
   the budget reserve* promotes it to a hard rule.
+- **Outside the pool.** Awarding a finding ranked below the line warns rather than refuses, so a
+  moderator can record a bid taken from the floor instead of the app rewriting what happened.
 
 Minimum bid defaults to 1 credit and is configurable in Setup.
 

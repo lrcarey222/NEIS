@@ -7,6 +7,7 @@ import { QrCode } from "@/components/QrCode";
 import { cx, panelistColumns } from "@/components/primitives";
 import {
   allPanelistViews,
+  auctionFindings,
   availableFindings,
   buildFindingView,
   roundCount,
@@ -16,7 +17,7 @@ import {
   type PanelistView,
 } from "@/lib/derive";
 import { useSiteUrl } from "@/lib/useSiteUrl";
-import type { EventState } from "@/lib/types";
+import { AUCTION_RANK_LIMIT, type EventState } from "@/lib/types";
 
 /**
  * Mode 2 — the live auction scoreboard. This is what is on screen for most of
@@ -36,6 +37,7 @@ export function AuctionMode({
   onOpenFinding: (view: FindingView) => void;
 }) {
   const panelists = useMemo(() => allPanelistViews(state), [state]);
+  const pool = useMemo(() => auctionFindings(state), [state]);
   const available = useMemo(() => availableFindings(state), [state]);
   const justSold = useJustSold(state);
 
@@ -66,7 +68,7 @@ export function AuctionMode({
             </h2>
             <p className="text-paper-mute mt-[0.6em] max-w-[52em] text-[0.9375em] leading-snug">
               {inProgress
-                ? "Any finding on the board, for any reason. Each panelist is building the strongest set for the question under their name."
+                ? `Any of the ${pool.length} findings on the board, for any reason — each room's top ${AUCTION_RANK_LIMIT}. Each panelist is building the strongest set for the question under their name.`
                 : roundIndex < 0
                   ? "The moderator will open Round 1 shortly."
                   : "Every panelist has drafted a full team."}
@@ -99,10 +101,11 @@ export function AuctionMode({
           {state.event.audienceOpen ? <PlayAlongTile state={state} /> : null}
 
           <section className="flex min-h-0 flex-1 flex-col">
-            <header className="border-ink-500 mb-[0.625em] flex items-baseline justify-between border-b pb-[0.5em]">
-              <h3 className="eyebrow">On the board</h3>
-              <span className="tabular text-signal font-mono text-[0.875em] font-bold">
-                {available.length}
+            <header className="border-ink-500 mb-[0.625em] flex items-baseline justify-between gap-[0.5em] border-b pb-[0.5em]">
+              <h3 className="eyebrow truncate">On the board</h3>
+              <span className="tabular shrink-0 font-mono text-[0.875em] font-bold">
+                <span className="text-signal">{available.length}</span>
+                <span className="text-paper-faint"> / {pool.length}</span>
               </span>
             </header>
             <div className="scroll-fade flex min-h-0 flex-1 flex-col gap-[0.5em] overflow-y-auto pr-[0.25em]">
@@ -111,15 +114,34 @@ export function AuctionMode({
                   No findings remaining.
                 </p>
               ) : (
-                available.map((view) => (
-                  <FindingCard
-                    key={view.finding.id}
-                    view={view}
-                    onOpen={onOpenFinding}
-                    compact
-                    soldAnimation={justSold?.findingId === view.finding.id}
-                  />
-                ))
+                /* Split into the rooms' own rank tiers rather than run as one
+                   list of fifteen. Every room's #1 sits together at the top,
+                   which is the comparison the panel is actually making — and it
+                   puts the front of the pool above the fold on a projector that
+                   nobody can scroll. */
+                Array.from({ length: AUCTION_RANK_LIMIT }, (_, index) => {
+                  const rank = index + 1;
+                  const tier = available.filter((v) => v.finding.breakoutRank === rank);
+                  if (tier.length === 0) return null;
+
+                  return (
+                    <div key={rank} className="flex flex-col gap-[0.5em]">
+                      <p className="text-paper-faint mt-[0.15em] font-mono text-[0.5625em] font-semibold tracking-[0.14em] uppercase">
+                        Room pick #{rank}
+                      </p>
+                      {tier.map((view) => (
+                        <FindingCard
+                          key={view.finding.id}
+                          view={view}
+                          onOpen={onOpenFinding}
+                          compact
+                          showBreakout
+                          soldAnimation={justSold?.findingId === view.finding.id}
+                        />
+                      ))}
+                    </div>
+                  );
+                })
               )}
             </div>
           </section>

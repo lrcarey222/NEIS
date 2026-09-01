@@ -13,7 +13,12 @@ import {
   cx,
 } from "@/components/primitives";
 import { saveAudienceEntry } from "@/lib/actions";
-import { findingsForBreakout, panelRoles, sortedBreakouts } from "@/lib/derive";
+import {
+  findingsForBreakout,
+  isAuctionEligible,
+  panelRoles,
+  sortedBreakouts,
+} from "@/lib/derive";
 import { eventKey } from "@/lib/firebase-config";
 import { useEvent } from "@/lib/useEvent";
 import {
@@ -120,7 +125,7 @@ function PlaySurface({
   entry: AudienceEntry | null;
   onChange: (entry: AudienceEntry | null) => void;
 }) {
-  const board = state.findings.filter((f) => f.submitted);
+  const board = state.findings.filter(isAuctionEligible);
 
   if (!state.event.audienceOpen && !entry) {
     return (
@@ -320,11 +325,11 @@ function Allocator({
   const [flash, setFlash] = useState(false);
 
   /**
-   * Twenty-five findings will not fit on a phone as a list, so they arrive
-   * folded into groups.
+   * The pool will not fit on a phone as a flat list, so it arrives folded into
+   * groups.
    *
    * Both cuts are offered because they answer different questions. By session
-   * is how the room heard them — five findings from the people who spent the
+   * is how the room heard them — the top three from the people who spent the
    * hour on that subject. By type is how you compare across the whole board:
    * every Fragility next to every other one. Neither is a subset of the other,
    * and picking for someone would be picking their reasoning for them.
@@ -332,7 +337,10 @@ function Allocator({
   const [groupBy, setGroupBy] = useState<"session" | "type">("session");
 
   const groups = useMemo(() => {
-    const board = state.findings.filter((f) => f.submitted);
+    // The same fifteen the panel is bidding on. The room cannot back a finding
+    // the stage was never offered, or the closing comparison is not a
+    // comparison.
+    const board = state.findings.filter(isAuctionEligible);
 
     if (groupBy === "type") {
       return FINDING_TYPES.map((type) => ({
@@ -352,7 +360,7 @@ function Allocator({
         label: breakout.name,
         hint: breakout.description,
         accentType: undefined,
-        findings: findingsForBreakout(state, breakout.id).filter((f) => f.submitted),
+        findings: findingsForBreakout(state, breakout.id).filter(isAuctionEligible),
       }))
       .filter((group) => group.findings.length > 0);
   }, [state, groupBy]);

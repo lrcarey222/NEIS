@@ -6,34 +6,46 @@ import {
   formatRemaining,
   presenterCount,
   presenterRemainingMs,
+  presentingSlot,
 } from "@/lib/schedule";
 import { sortedBreakouts } from "@/lib/derive";
 import { useServerClock } from "@/lib/useEvent";
 import type { EventState } from "@/lib/types";
 
 /**
- * The hard-timed clock for the five breakout presentations.
+ * The hard-timed clock for the five breakout presentations, as a floating
+ * overlay over whatever else is on screen.
  *
- * Overlays the findings board rather than replacing it: the room needs to see
- * the presenter's own findings behind the clock, so the board is dimmed and
- * the timer sits over it instead of taking the screen.
+ * This is the fallback path. On the findings board the presentation gets the
+ * whole screen — `BoardMode` shows the presenting room's five findings and
+ * carries the clock in its own header, because an overlay there would only
+ * cover the findings it is timing. So this renders when the operator has the
+ * projector on some *other* mode mid-presentation and would otherwise lose the
+ * clock entirely.
  *
  * Amber at thirty seconds, red at zero, then counting up — because a clock
  * that stops at zero stops being a deadline. And red is never the only signal:
  * it says "+0:20 OVER" in words the whole time.
  */
-export function PresentationOverlay({ state }: { state: EventState }) {
+export function PresentationOverlay({
+  state,
+  /** True when the mode on screen already shows the presentation itself. */
+  ownedByMode = false,
+}: {
+  state: EventState;
+  ownedByMode?: boolean;
+}) {
   const { now } = useServerClock(250);
   const schedule = state.runOfShow;
   const segment = activeSegment(schedule);
 
-  if (!segment?.presentationTimer) return null;
+  const index = presentingSlot(schedule, segment);
+  if (index === null || ownedByMode) return null;
 
   const remaining = presenterRemainingMs(schedule, segment, now);
   if (remaining === null) return null;
 
   const total = presenterCount(segment);
-  const index = schedule.presenterIndex;
   const breakouts = sortedBreakouts(state);
   const breakout = breakouts[index];
   const over = remaining < 0;

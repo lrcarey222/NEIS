@@ -6,7 +6,7 @@ import { QrCode } from "@/components/QrCode";
 import { cx } from "@/components/primitives";
 import { panelRoles, roundCount, sortedBreakouts } from "@/lib/derive";
 import { useSiteUrl } from "@/lib/useSiteUrl";
-import { FINDING_TYPES, FINDING_TYPE_META } from "@/lib/types";
+import { AUCTION_RANK_LIMIT, FINDING_TYPES, FINDING_TYPE_META } from "@/lib/types";
 import type { EventState } from "@/lib/types";
 
 /**
@@ -119,7 +119,11 @@ export function InstructionsMode({ state }: { state: EventState }) {
             </Bullet>
             <Bullet>
               Use <span className="text-paper-dim font-semibold">↑ / ↓</span> to rank your
-              five findings 1–5.
+              five findings 1–5. Your{" "}
+              <span className="text-paper-dim font-semibold">
+                top {AUCTION_RANK_LIMIT}
+              </span>{" "}
+              go to the auction — rank carefully.
             </Bullet>
             <Bullet>
               <span className="text-paper-dim font-semibold">Submit findings</span> puts them
