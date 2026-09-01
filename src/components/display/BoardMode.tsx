@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 
-import { FindingCard } from "@/components/FindingCard";
 import {
   ConfidenceTag,
   EmptyState,
@@ -13,6 +12,7 @@ import {
 import {
   buildFindingView,
   findingsForBreakout,
+  isAuctionEligible,
   sortedBreakouts,
   type FindingView,
 } from "@/lib/derive";
@@ -24,18 +24,18 @@ import {
   presentingSlot,
 } from "@/lib/schedule";
 import { useServerClock } from "@/lib/useEvent";
-import type { Breakout, EventState } from "@/lib/types";
+import { AUCTION_RANK_LIMIT, type Breakout, type EventState } from "@/lib/types";
 
 /**
  * Mode 1 — the Strategic Findings Board.
  *
- * One column per breakout, findings in the breakout's own ranked order. The
- * whole board has to fit on a 16:9 screen without scrolling, so the columns
- * flex and the cards stay compact; the detail panel carries everything that
- * does not fit.
+ * One column per breakout, carrying that room's top three in its own ranked
+ * order — the auction pool, and nothing else. Fifteen cards fit a 16:9 screen
+ * at a size the back row can read; twenty-five did not. The ten below the line
+ * are still in the breakout's own workspace, the CSV and the printed pack.
  *
  * With one exception: while a breakout is presenting, the board shows **only
- * that room's five findings** — see `PresentationBoard`.
+ * that room's three** — see `PresentationBoard`.
  */
 export function BoardMode({
   state,
@@ -71,21 +71,24 @@ function FullBoard({
   state: EventState;
   onOpenFinding: (view: FindingView) => void;
 }) {
+  // The auction pool only — each room's top three. Twenty-five cards on one
+  // 16:9 forced every headline down to a size nobody past row four could read;
+  // fifteen buys back the height to show each one properly, and the ten below
+  // the line are still in the printable record and in the breakout's own view.
   const columns = useMemo(() => {
     return sortedBreakouts(state).map((breakout) => {
       const findings = findingsForBreakout(state, breakout.id)
-        .filter((f) => f.submitted)
+        .filter(isAuctionEligible)
         .map((f) => buildFindingView(state, f));
       return { breakout, findings };
     });
   }, [state]);
 
   const all = columns.flatMap((c) => c.findings);
-  const totalSubmitted = all.length;
-  const inAuction = all.filter((v) => v.inAuction).length;
+  const inAuction = all.length;
   const drafted = all.filter((v) => v.isDrafted).length;
 
-  if (totalSubmitted === 0) {
+  if (inAuction === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-[3em]">
         <div className="max-w-[26em] text-center">
@@ -95,7 +98,7 @@ function FullBoard({
           </h2>
           <p className="text-paper-mute mt-[0.75em] text-[0.9375em] leading-relaxed">
             Findings appear here the moment each room submits. Five breakouts, five
-            findings each.
+            findings each — the top {AUCTION_RANK_LIMIT} from every room go on the board.
           </p>
           <div className="mt-[2em] flex justify-center gap-[0.75em]">
             {sortedBreakouts(state).map((breakout) => (
@@ -127,12 +130,12 @@ function FullBoard({
         <div>
           <p className="eyebrow">Strategic Findings Board</p>
           <h2 className="text-paper mt-[0.15em] text-[1.375em] leading-none font-semibold">
-            {totalSubmitted} findings from {columns.filter((c) => c.findings.length).length}{" "}
+            {inAuction} findings from {columns.filter((c) => c.findings.length).length}{" "}
             breakouts
           </h2>
         </div>
         <p className="text-paper-mute tabular font-mono text-[0.75em] tracking-[0.1em] uppercase">
-          <span className="text-signal">{inAuction - drafted}</span> in the auction
+          <span className="text-signal">{inAuction - drafted}</span> on the board
           <span className="text-paper-faint"> / </span>
           {drafted} drafted
         </p>
@@ -141,43 +144,30 @@ function FullBoard({
       <div className="grid flex-1 grid-cols-5 gap-[0.75em] overflow-hidden">
         {columns.map(({ breakout, findings }) => (
           <section key={breakout.id} className="flex min-h-0 flex-col">
-            <header className="border-ink-500 mb-[0.625em] border-b pb-[0.5em]">
+            <header className="border-ink-500 mb-[0.5em] border-b pb-[0.4em]">
               <h3 className="text-paper text-[0.9375em] leading-tight font-semibold text-balance">
                 {breakout.name}
               </h3>
-              <p className="text-paper-faint mt-[0.35em] font-mono text-[0.5625em] tracking-[0.12em] uppercase">
+              <p className="text-paper-faint mt-[0.3em] font-mono text-[0.5625em] tracking-[0.12em] uppercase">
                 {findings.length
-                  ? `${findings.length} findings`
+                  ? `Top ${findings.length}`
                   : breakout.submissionStatus === "drafting"
                     ? "Drafting"
                     : "Not submitted"}
               </p>
             </header>
 
-            <div className="scroll-fade flex min-h-0 flex-1 flex-col gap-[0.4em] overflow-y-auto">
+            {/* Three cards sharing the column height rather than five scrolling
+                inside it, so a headline is read rather than scanned. */}
+            <ol className="grid min-h-0 flex-1 auto-rows-fr gap-[0.5em]">
               {findings.length === 0 ? (
                 <EmptyState title="Awaiting submission" />
               ) : (
-                findings.map((view, index) => (
-                  <div key={view.finding.id} className="contents">
-                    {/* The line the rooms' ranking draws. Everything above it
-                        goes to auction; everything below it is on the record and
-                        in the pack, but not for sale. Drawn here rather than left
-                        implicit so a room can see the consequence of its own
-                        ordering while it can still change it. */}
-                    {!view.inAuction && findings[index - 1]?.inAuction ? (
-                      <p className="text-paper-faint mt-[0.35em] flex items-center gap-[0.5em] font-mono text-[0.5em] tracking-[0.14em] whitespace-nowrap uppercase">
-                        Not in the auction
-                        <span className="bg-ink-500 h-px flex-1" />
-                      </p>
-                    ) : null}
-                    <div className={cx(!view.inAuction && "opacity-55")}>
-                      <FindingCard view={view} onOpen={onOpenFinding} compact />
-                    </div>
-                  </div>
+                findings.map((view) => (
+                  <BoardCard key={view.finding.id} view={view} onOpen={onOpenFinding} />
                 ))
               )}
-            </div>
+            </ol>
           </section>
         ))}
       </div>
@@ -186,15 +176,86 @@ function FullBoard({
 }
 
 /**
- * One breakout's five findings, given the whole screen.
+ * A finding at board size.
  *
- * During the presentations the room is listening to one room talk through its
- * own five findings for two and a half minutes. Projecting all twenty-five
- * buries the five that matter among twenty that do not, so for as long as
- * somebody is on their feet the board shows only theirs — and, having a fifth
- * of the content, shows each one properly: the headline at a size that reads
- * from the back, plus why it matters and the evidence, so the room can follow
- * the argument rather than squinting at a headline.
+ * Fifteen of these share the screen instead of twenty-five, and the height that
+ * buys goes entirely into the headline — the one thing the room reads from the
+ * back — plus why it matters, which is what turns a headline into an argument
+ * somebody can bid on. Evidence stays in the detail panel: on a card this size
+ * it would push the headline back down to where it started.
+ */
+function BoardCard({
+  view,
+  onOpen,
+}: {
+  view: FindingView;
+  onOpen: (view: FindingView) => void;
+}) {
+  const { finding, isDrafted, panelist, transaction } = view;
+
+  return (
+    <li
+      data-type={finding.type}
+      className={cx(
+        "type-bar panel flex min-h-0 flex-col p-[0.7em] text-left transition-colors",
+        isDrafted ? "opacity-50" : "hover:border-paper-faint",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onOpen(view)}
+        className="flex min-h-0 flex-1 flex-col items-start overflow-hidden text-left"
+        aria-label={`Open finding: ${finding.headline}`}
+      >
+        <div className="mb-[0.45em] flex w-full shrink-0 items-center justify-between gap-[0.5em]">
+          <TypeChip type={finding.type} size="sm" />
+          {isDrafted ? (
+            <span className="bg-signal text-ink-900 shrink-0 rounded-sm px-[0.4em] py-[0.1em] font-mono text-[0.5em] font-bold tracking-[0.12em] uppercase">
+              Drafted
+            </span>
+          ) : (
+            <ConfidenceTag level={finding.confidence} />
+          )}
+        </div>
+
+        <h4
+          className={cx(
+            "text-paper text-[0.9375em] leading-snug font-semibold text-balance",
+            isDrafted && "line-through decoration-paper-faint/50",
+          )}
+        >
+          {finding.headline || (
+            <span className="text-paper-faint italic">Untitled finding</span>
+          )}
+        </h4>
+
+        {finding.whyItMatters ? (
+          <p className="text-paper-mute mt-[0.45em] line-clamp-4 text-[0.75em] leading-snug">
+            {finding.whyItMatters}
+          </p>
+        ) : null}
+      </button>
+
+      {isDrafted && panelist ? (
+        <p className="border-ink-500 text-paper-dim mt-[0.5em] shrink-0 truncate border-t pt-[0.4em] text-[0.6875em] leading-tight font-medium">
+          {panelist.name}
+          <span className="text-paper-faint"> · </span>
+          <span className="tabular text-signal">{transaction?.price}</span>
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * One breakout's three, given the whole screen.
+ *
+ * During the presentations the room is listening to one room talk for two and a
+ * half minutes, so for as long as somebody is on their feet the board shows
+ * only theirs — and only the three that are going to auction, which is what the
+ * two and a half minutes are worth spending on. A third of the screen each is
+ * enough for the headline, why it matters and the evidence, so the room follows
+ * an argument rather than squinting at a headline.
  *
  * The clock and the roster live in this header rather than in a floating
  * overlay, because the whole screen is already the presentation and an overlay
@@ -218,7 +279,7 @@ function PresentationBoard({
   const findings = useMemo(
     () =>
       findingsForBreakout(state, breakout.id)
-        .filter((f) => f.submitted)
+        .filter(isAuctionEligible)
         .map((f) => buildFindingView(state, f)),
     [state, breakout.id],
   );
@@ -318,9 +379,9 @@ function PresentationBoard({
 /**
  * A finding at presentation size.
  *
- * Five of these share the screen instead of twenty-five, so each one carries
- * the full headline unclamped, why it matters, and the evidence — the material
- * the presenter is actually speaking to.
+ * Three of these share the screen, so each one carries the full headline
+ * unclamped, why it matters, and the evidence — the material the presenter is
+ * actually speaking to.
  */
 function PresentationCard({
   view,

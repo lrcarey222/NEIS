@@ -83,18 +83,21 @@ what is actually happening. See [Running the day](#running-the-day).
 
 ## 1a. Briefing the room
 
-The **Instructions** screen is the projected briefing: a QR code and PIN for every
-breakout, the five finding types, what submitting does, and the roles the panel will draft
-through. When the play-along is open it also carries the audience QR code. Leave it up while people find their tables and while the moderator explains the
-exercise — it is the fastest way to fix the room that has not found its link.
+The **Instructions** screen is the projected briefing, in three steps: the five finding
+types, what submitting does, and the roles the panel will draft through. Under them sits
+**the whole run of show**, at a size the back of the room can read. Leave it up while
+people find their tables and while the moderator explains the exercise.
 
-It reads the live event, so renamed breakouts and edited PINs appear on it immediately, and the
-QR codes carry `?event=rehearsal` through when the projector is on the rehearsal slot.
+It reads the live event, so renamed breakouts, edited roles and an edited agenda appear on
+it immediately.
 
-> **It projects the room PINs.** That is deliberate — everyone who can read the screen is in the
-> room — but `/display/` is a public URL, so anyone with the link sees them too. See
-> [Security posture](#security-posture); switch to another mode if that matters to you.
->
+> **It no longer carries the breakout QR codes or room PINs.** Those are on the table
+> cards, in front of the person who needs them; on the projector they took two thirds of a
+> screen whose job is explaining the exercise, and they put the PINs on a public URL. Print
+> the landing page (`/`) for the table cards — step 4 of the setup above.
+
+The one code left on this screen is the **play-along**, shown while it is open, because it
+is the only thing here that is not already on the table card.
 > The same applies to the play-along: `/play/` has no PIN at all, by design — a QR code a whole
 > room scans cannot also be a gate. Anyone with the link can submit a portfolio.
 
@@ -174,11 +177,13 @@ many people are in, so you can see the room arriving from the front.
 
 The **agenda strip** is available under every display mode — a thin band showing the day
 with the current segment marked and past ones dimmed. It answers "where are we" and "when
-is lunch" without a slide change.
+is lunch" without a slide change. The one exception is the **Instructions** screen, which
+carries the full run of show at size; the strip under it would be the same agenda twice.
 
-`/agenda/` is the same thing on a phone, public and PIN-free, with its QR code on the
-Instructions screen next to the breakout codes. It updates live, so it shows what is
-actually happening rather than what was printed.
+`/agenda/` is the same thing on a phone, public and PIN-free. It updates live, so it shows
+what is actually happening rather than what was printed. It no longer has a QR code on the
+projector — the run of show is on the Instructions screen instead — but the URL still works
+if you want it on a table card.
 
 ### The breakout phase strip
 
@@ -224,6 +229,12 @@ second.
 
 Set the big screen to **Findings Board**. Start the countdown from the control bar if you want
 it visible in the rooms.
+
+The board carries **each room's top three** — fifteen cards, one column per breakout, each
+with its headline and why it matters at a size the back row can read. The ten below the
+line are not on the projector; they are in the room's own workspace, the CSV and the
+printable pack. While a room is presenting, the board hands the whole screen to that
+room's three.
 
 The **Breakouts** tab is your live view of all five rooms at once: submission status, how many
 findings each has written, and a green **N ONLINE** badge showing how many devices actually have
@@ -295,10 +306,15 @@ appears next to the mode buttons to flip between them:
 2. **The summary cuts** — findings submitted and acquired, credits committed, average price,
    then highest-valued findings, most-represented breakouts, and what went undrafted
 
-Then switch to **Audience vs Panel** for the closing comparison: what the room paid per person
-for each finding against what the panel actually paid, the findings the room rated far above the
-panel (including ones nobody drafted), the ones the panel paid up for and the room did not, and
-the top pick under each role.
+Then switch to **Audience vs Panel** for the closing comparison. It is deliberately one
+thing: all fifteen findings, ranked by what the room paid per person, each on a single
+track with the room's average as the bar and the panel's price as a marker on it. The
+disagreement is the distance between the two marks, and the moderator is talking over this
+screen rather than reading it aloud.
+
+The finer cuts it used to show alongside — biggest gap each way, top pick per role — are
+still computed and still in the **Findings CSV** and the **printable summary**, which is
+where a number worth reading twice belongs.
 
 > **Why the audience figure is an average over everyone.** It divides by every submitted
 > portfolio, including the people who put nothing on that finding — which is exactly what a panel
