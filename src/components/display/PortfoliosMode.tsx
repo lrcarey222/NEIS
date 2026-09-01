@@ -8,7 +8,6 @@ import {
   allPanelistViews,
   buildFindingView,
   buildSummary,
-  roundCount,
   type FindingView,
   type PanelistView,
 } from "@/lib/derive";
@@ -33,20 +32,23 @@ export function PortfoliosMode({
 }) {
   const panelists = useMemo(() => allPanelistViews(state), [state]);
   const summary = useMemo(() => buildSummary(state), [state]);
-  const rounds = roundCount(state);
 
   return (
     // Two full screens, not one split screen: the roster and the summary cuts
     // each get the whole 16:9 so both stay legible from the back of the room.
     // The operator flips between them from /control.
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
+      {/* The roster carries no headline: five cards already say who drafted
+          what, and a line restating the round count only ate height the picks
+          could use. The summary screen keeps one, because a wall of numbers
+          does need saying what it is. */}
       <div className="mb-[0.7em] shrink-0">
         <p className="eyebrow">Final Portfolios</p>
-        <h2 className="text-paper mt-[0.15em] text-[1.75em] leading-none font-semibold">
-          {state.event.showSummary
-            ? "Where the credits went"
-            : `${rounds} findings each, drafted through ${panelists.length} lenses`}
-        </h2>
+        {state.event.showSummary ? (
+          <h2 className="text-paper mt-[0.15em] text-[1.75em] leading-none font-semibold">
+            Where the credits went
+          </h2>
+        ) : null}
       </div>
 
       {state.event.showSummary ? (

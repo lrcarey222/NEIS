@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { QrCode } from "@/components/QrCode";
 import { cx } from "@/components/primitives";
 import { panelRoles, roundCount, sortedBreakouts } from "@/lib/derive";
+import { segmentIndex } from "@/lib/schedule";
 import { useSiteUrl } from "@/lib/useSiteUrl";
 import { AUCTION_RANK_LIMIT, FINDING_TYPES, FINDING_TYPE_META } from "@/lib/types";
 import type { EventState } from "@/lib/types";
@@ -12,11 +13,16 @@ import type { EventState } from "@/lib/types";
 /**
  * Mode 5 — the briefing screen.
  *
- * This is what is on the projector while the room is being seated and while
- * the moderator explains the exercise: how to get into your breakout, what the
- * five findings are, and what happens to them afterwards. It carries the room
- * PINs, because the failure mode this screen exists to prevent is a table that
- * never finds its link.
+ * What is on the projector while the room is being seated and while the
+ * moderator explains the exercise: what the five findings are, what happens to
+ * them, and where the day goes.
+ *
+ * It used to open with a grid of five QR codes for joining the breakouts. Those
+ * are gone: the room link and PIN are on the table card, which is in front of
+ * the person who needs them, and the codes were taking two thirds of a screen
+ * whose actual job is explaining the exercise. The run of show moved here for
+ * the same reason — a code that has to be scanned to answer "when is lunch" is
+ * a worse answer than the agenda being on the wall.
  */
 export function InstructionsMode({ state }: { state: EventState }) {
   const breakouts = useMemo(() => sortedBreakouts(state), [state]);
@@ -25,68 +31,27 @@ export function InstructionsMode({ state }: { state: EventState }) {
   const site = useSiteUrl();
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
-      <div className="mb-[0.8em] flex items-end justify-between gap-[2em]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-[1.75em] pb-[1.25em]">
+      <div className="mb-[0.8em] flex shrink-0 items-end justify-between gap-[2em]">
         <div>
           <p className="eyebrow text-signal">How this session works</p>
           <h2 className="text-paper mt-[0.15em] text-[1.75em] leading-none font-semibold">
-            Scan your table&apos;s code to open your breakout
+            Five rooms, five findings each, one auction
           </h2>
         </div>
         <p className="text-paper-mute font-mono text-[0.6875em] tracking-[0.12em] uppercase">
           {breakouts.length} breakouts
           <span className="text-paper-faint"> · </span>5 findings each
-          <span className="text-paper-faint"> · </span>then the auction
+          <span className="text-paper-faint"> · </span>top {AUCTION_RANK_LIMIT} to the auction
         </p>
       </div>
 
-      <section className="flex min-h-0 flex-1 flex-col">
-        <StepHeading
-          number={1}
-          title="Join your breakout"
-          note="Everyone at the table can be in at once — each field saves separately, so you will not overwrite each other."
-        />
-
-        <div
-          className="grid flex-1 gap-[0.75em]"
-          style={{
-            gridTemplateColumns: `repeat(${Math.max(breakouts.length, 1)}, minmax(0, 1fr))`,
-          }}
-        >
-          {breakouts.map((breakout) => (
-            <article
-              key={breakout.id}
-              className="panel flex min-h-0 flex-col items-center p-[0.75em]"
-            >
-              {/* Sized off the card's width and centred in whatever height the
-                  row has left, so the code stays square and stays the largest
-                  thing on the card — it has to be scannable from a seat away. */}
-              <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                <QrCode
-                  url={site.link(`breakout/${breakout.slug}`)}
-                  className="w-full max-w-[14em] p-[0.35em]"
-                />
-              </div>
-              <h3 className="text-paper mt-[0.6em] text-center text-[0.875em] leading-tight font-semibold text-balance">
-                {breakout.name}
-              </h3>
-              <p className="text-paper-faint mt-[0.35em] text-center font-mono text-[0.5625em] leading-snug break-all">
-                {site.display}/breakout/{breakout.slug}/
-              </p>
-              <p className="mt-[0.5em] font-mono text-[0.6875em] tracking-[0.12em] uppercase">
-                <span className="text-paper-faint">PIN </span>
-                <span className="text-signal tabular font-bold">
-                  {breakout.pin || "on your table card"}
-                </span>
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <div className="mt-[0.9em] grid shrink-0 grid-cols-[1.5fr_1fr_1.15fr] gap-[0.75em]">
-        <section className="panel p-[0.75em]">
-          <StepHeading number={2} title="Agree five findings — one of each type" compact />
+      {/* The three steps size to their content; the day gets the rest of the
+          screen. It is the thing people look up at between sessions, so it is
+          the thing that should be big. */}
+      <div className="grid shrink-0 grid-cols-[1.5fr_1fr_1.15fr] gap-[0.75em]">
+        <section className="panel flex flex-col p-[0.75em]">
+          <StepHeading number={1} title="Agree five findings — one of each type" compact />
           <ul className="mt-[0.5em] space-y-[0.3em]">
             {FINDING_TYPES.map((type) => {
               const meta = FINDING_TYPE_META[type];
@@ -110,8 +75,8 @@ export function InstructionsMode({ state }: { state: EventState }) {
           </ul>
         </section>
 
-        <section className="panel p-[0.75em]">
-          <StepHeading number={3} title="Submit to the board" compact />
+        <section className="panel flex flex-col p-[0.75em]">
+          <StepHeading number={2} title="Submit to the board" compact />
           <ul className="text-paper-mute mt-[0.5em] space-y-[0.35em] text-[0.75em] leading-snug">
             <Bullet>
               Everything saves automatically when you leave a field. There is no save
@@ -132,8 +97,8 @@ export function InstructionsMode({ state }: { state: EventState }) {
           </ul>
         </section>
 
-        <section className="panel p-[0.75em]">
-          <StepHeading number={4} title="Then: the draft" compact />
+        <section className="panel flex flex-col p-[0.75em]">
+          <StepHeading number={3} title="Then: the draft" compact />
           <p className="text-paper-mute mt-[0.5em] text-[0.75em] leading-snug">
             The panel bids{" "}
             <span className="text-paper-dim font-semibold">
@@ -162,10 +127,12 @@ export function InstructionsMode({ state }: { state: EventState }) {
           )}
 
           {/* The play-along is announced here rather than sprung on the room
-              mid-auction, so people know to keep their phones out. */}
+              mid-auction, so people know to keep their phones out. This is the
+              one code left on the screen, because it is the only thing here
+              that is not already on the table card. */}
           {state.event.audienceOpen ? (
-            <div className="border-ink-500 mt-[0.6em] flex items-center gap-[0.6em] border-t pt-[0.6em]">
-              <QrCode url={site.link("play")} className="w-[4em] shrink-0 p-[0.2em]" />
+            <div className="border-ink-500 mt-auto flex items-center gap-[0.6em] border-t pt-[0.6em]">
+              <QrCode url={site.link("play")} className="w-[4.5em] shrink-0 p-[0.2em]" />
               <p className="text-paper-mute text-[0.6875em] leading-snug">
                 <span className="text-signal font-semibold">You play too.</span> Scan this
                 during the draft to spend your own {state.event.audienceBudget} credits. We
@@ -173,21 +140,82 @@ export function InstructionsMode({ state }: { state: EventState }) {
               </p>
             </div>
           ) : null}
-
-          {/* The agenda, alongside the breakout codes, so the answer to "when
-              is lunch" is on somebody's phone rather than shouted. */}
-          {state.runOfShow.segments.length > 0 ? (
-            <div className="border-ink-500 mt-[0.6em] flex items-center gap-[0.6em] border-t pt-[0.6em]">
-              <QrCode url={site.link("agenda")} className="w-[4em] shrink-0 p-[0.2em]" />
-              <p className="text-paper-mute text-[0.6875em] leading-snug">
-                <span className="text-paper-dim font-semibold">The run of show.</span> Scan
-                for today&apos;s agenda on your phone — it updates live as the session runs.
-              </p>
-            </div>
-          ) : null}
         </section>
       </div>
+
+      <RunOfShow state={state} />
     </div>
+  );
+}
+
+/**
+ * The day, on the briefing screen.
+ *
+ * This is the wall answer to "when is lunch", which is otherwise asked of a
+ * neighbour every ten minutes. Planned wall-clock times rather than live
+ * projected ones: this screen is up before the day starts and during the
+ * seating, when the schedule has not drifted yet and a time that moves would
+ * only look like a mistake. The live version — what is actually running, and
+ * how far behind — is the agenda strip along the bottom of every other mode.
+ */
+function RunOfShow({ state }: { state: EventState }) {
+  const segments = state.runOfShow.segments;
+  if (segments.length === 0) return null;
+
+  const active = segmentIndex(state.runOfShow);
+  // Down the columns, not across: a day reads top-to-bottom, and column-major
+  // flow keeps the morning together instead of interleaving it with the
+  // afternoon. Two columns beat one long list at 16:9 by roughly double the
+  // type size.
+  const rows = Math.ceil(segments.length / 2);
+
+  return (
+    <section className="mt-[0.9em] flex min-h-0 flex-1 flex-col">
+      <p className="eyebrow mb-[0.5em] shrink-0">The run of show</p>
+      <ol
+        className="grid min-h-0 flex-1 grid-flow-col gap-x-[1.5em] gap-y-[0.15em]"
+        style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
+      >
+        {segments.map((segment, index) => {
+          const isActive = index === active;
+          const isPast = active >= 0 && index < active;
+
+          return (
+            <li
+              key={segment.id}
+              aria-current={isActive ? "step" : undefined}
+              className={cx(
+                "flex min-w-0 items-center gap-[0.75em] rounded-sm px-[0.5em]",
+                isActive && "bg-signal/15 border-signal/50 border",
+                isPast && "opacity-40",
+              )}
+            >
+              <span
+                className={cx(
+                  "tabular w-[3.5em] shrink-0 font-mono text-[0.8125em] font-bold tracking-[0.04em]",
+                  isActive ? "text-signal" : "text-paper-faint",
+                )}
+              >
+                {segment.plannedStart}
+              </span>
+              <span
+                className={cx(
+                  "min-w-0 flex-1 truncate text-[0.9375em] leading-tight",
+                  isActive ? "text-paper font-semibold" : "text-paper-mute",
+                )}
+              >
+                {/* Glyph as well as colour, as everywhere else. */}
+                {isPast ? "✓ " : isActive ? "▶ " : ""}
+                {segment.title}
+              </span>
+              <span className="text-paper-faint tabular shrink-0 font-mono text-[0.75em]">
+                {segment.plannedMinutes}m
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 

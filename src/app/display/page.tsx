@@ -129,8 +129,11 @@ export default function DisplayPage() {
 
       {/* Available under every mode, so "where are we, when do we break" never
           costs a slide change. Toggled from /control, because during the
-          auction the screen is genuinely full. */}
-      <AgendaStrip state={state} />
+          auction the screen is genuinely full.
+
+          Except on the briefing screen, which now carries the whole run of show
+          at readable size — the strip under it would be the same agenda twice. */}
+      {mode === "instructions" ? null : <AgendaStrip state={state} />}
 
       {/* The board hands its whole screen to the presenting room and carries
           the clock itself, so the overlay only steps in when the projector is
