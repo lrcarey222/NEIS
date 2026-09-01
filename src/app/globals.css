@@ -160,57 +160,86 @@ body {
   border-radius: 2px;
 }
 
-/* --- Form controls -------------------------------------------------------- */
+/* --- Form controls --------------------------------------------------------
+   Declared inside `@layer components` so a utility on the element still wins.
+   `.field` sets `width: 100%`, which is right for the stacked forms but wrong
+   for the narrow number boxes in the control room and the play-along stepper —
+   unlayered, the class beat `w-20` and the field grew until the `+` button was
+   pushed off the side of a phone. */
 
-.field {
-  width: 100%;
-  background: var(--color-ink-900);
-  border: 1px solid var(--color-ink-400);
-  border-radius: 0;
-  padding: 0.5rem 0.625rem;
-  color: var(--color-paper);
-  font-size: 0.9375rem;
-  line-height: 1.4;
+@layer components {
+  .field {
+    width: 100%;
+    background: var(--color-ink-900);
+    border: 1px solid var(--color-ink-400);
+    border-radius: 0;
+    padding: 0.5rem 0.625rem;
+    color: var(--color-paper);
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+
+  .field::placeholder {
+    color: var(--color-paper-faint);
+  }
+
+  .field:focus {
+    border-color: var(--color-signal);
+    outline: none;
+  }
+
+  .field:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  textarea.field {
+    resize: vertical;
+    min-height: 4.5rem;
+  }
+
+  select.field {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--color-paper-mute) 50%),
+      linear-gradient(135deg, var(--color-paper-mute) 50%, transparent 50%);
+    background-position: right 1rem center, right 0.7rem center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2rem;
+  }
+
+  /* iOS Safari zooms the whole page when a field smaller than 16px takes
+     focus, and never zooms back out. 15px is right for the operator's laptop,
+     so the bump is scoped to touch devices — in practice, the play-along. */
+  @media (pointer: coarse) {
+    .field {
+      font-size: 1rem;
+    }
+  }
+
+  .label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-paper-mute);
+    margin-bottom: 0.375rem;
+  }
 }
 
-.field::placeholder {
-  color: var(--color-paper-faint);
+/* Kills the spin buttons on the play-along steppers — the − and + controls are
+   the affordance there, and the native arrows are a 6px tap target that eats
+   the width the number needs on a 320px handset. */
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
-
-.field:focus {
-  border-color: var(--color-signal);
-  outline: none;
-}
-
-.field:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-textarea.field {
-  resize: vertical;
-  min-height: 4.5rem;
-}
-
-select.field {
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
   appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--color-paper-mute) 50%),
-    linear-gradient(135deg, var(--color-paper-mute) 50%, transparent 50%);
-  background-position: right 1rem center, right 0.7rem center;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 2rem;
-}
-
-.label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-paper-mute);
-  margin-bottom: 0.375rem;
+  margin: 0;
 }
 
 /* --- Buttons -------------------------------------------------------------- */
