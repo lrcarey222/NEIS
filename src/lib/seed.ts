@@ -9,6 +9,7 @@
 // one click ("Clear findings").
 // ---------------------------------------------------------------------------
 
+import { emptySchedule } from "./schedule";
 import {
   type Breakout,
   DEFAULT_ROLES,
@@ -18,6 +19,8 @@ import {
   type FindingType,
   type Panelist,
   SCHEMA_VERSION,
+  type ScheduleState,
+  type Segment,
 } from "./types";
 
 const DEFAULT_BREAKOUT_PIN = process.env.BREAKOUT_PIN?.trim() || "1234";
@@ -107,6 +110,177 @@ export const DEFAULT_ROUND_COUNT = 3;
  * default must not retroactively shrink a portfolio someone already drafted.
  */
 export const LEGACY_ROUND_COUNT = 5;
+
+// --- The run of show -------------------------------------------------------
+
+/**
+ * The breakout's internal run of show.
+ *
+ * This exists because of one failure mode: a room that discusses for seventy
+ * minutes and then discovers it has five to write in. The phase at minute 35
+ * is the whole point of the strip, and it is written as an instruction rather
+ * than a topic so it cannot be read as "keep talking".
+ */
+export const BREAKOUT_PHASES: Segment["phases"] = [
+  {
+    title: "Set the frame",
+    minutes: 5,
+    note: "Sector boundary. Candid assessment, not consensus",
+  },
+  {
+    title: "Status update",
+    minutes: 15,
+    note: "The 5–7 most consequential changes since March 2025",
+  },
+  {
+    title: "Interrogate",
+    minutes: 15,
+    note: "Separate announcements from implementation and outcomes",
+  },
+  {
+    title: "Diagnose",
+    minutes: 20,
+    note: "Typists: open your cards now and start typing headlines",
+  },
+  {
+    title: "Draft the five findings",
+    minutes: 13,
+    note: "Headline, why it matters, confidence. Evidence if you have it",
+  },
+  {
+    title: "Sharpen and rank",
+    minutes: 5,
+    note: "Merge overlaps. Set the 1–5 order",
+  },
+  {
+    title: "Presenter and submit",
+    minutes: 2,
+    note: "Name your presenter. Submit",
+  },
+];
+
+/**
+ * The day, as planned.
+ *
+ * Wall-clock starts are stored as well as derived: the printed agenda and the
+ * table cards carry these times, so the record has to keep saying 9:50 even
+ * after the opening panel has taken an extra five minutes. `projectedStarts`
+ * in lib/schedule.ts is what shows the operator the knock-on effect.
+ */
+export function createRunOfShow(): ScheduleState {
+  const segments: Segment[] = [
+    {
+      id: "sg-welcome",
+      title: "Welcome and Framing",
+      description:
+        "What this session is for, how the morning runs, and what the room is being asked to produce.",
+      plannedStart: "8:30",
+      plannedMinutes: 15,
+      displayMode: "card",
+    },
+    {
+      id: "sg-standing",
+      title: "Where Do Things Stand Today",
+      description:
+        "Three takes on the last eighteen months, before the rooms go and argue about them.",
+      speakers: ["Jon Larsen", "Brian Deese / Charlie Anderson", "Mike Catanzaro"],
+      plannedStart: "8:45",
+      plannedMinutes: 55,
+      displayMode: "card",
+    },
+    {
+      id: "sg-move",
+      title: "Move to Breakout Rooms",
+      description: "Find your room, open your link, enter the PIN on your table card.",
+      plannedStart: "9:40",
+      plannedMinutes: 10,
+      displayMode: "instructions",
+    },
+    {
+      id: "sg-breakouts",
+      title: "Breakout Sessions",
+      description: "Five rooms, five Strategic Findings each, written as you go.",
+      plannedStart: "9:50",
+      plannedMinutes: 75,
+      displayMode: "findings",
+      phases: BREAKOUT_PHASES,
+    },
+    {
+      id: "sg-seating",
+      title: "Transition and Seating",
+      description: "Back to the main room. Presenters to the front.",
+      plannedStart: "11:05",
+      plannedMinutes: 10,
+      displayMode: "instructions",
+    },
+    {
+      id: "sg-presentations",
+      title: "Breakout Presentations",
+      description: "Two and a half minutes each. Five rooms, hard-timed.",
+      plannedStart: "11:15",
+      plannedMinutes: 15,
+      displayMode: "findings",
+      presentationTimer: true,
+      presentationSeconds: 150,
+      presenterCount: 5,
+      operatorNotes:
+        "Hard-timed. Click NEXT PRESENTER as each one starts, not as they finish.",
+    },
+    {
+      id: "sg-questions",
+      title: "Panel Questions",
+      description: "The panel puts its questions to the rooms before bidding opens.",
+      plannedStart: "11:30",
+      plannedMinutes: 5,
+      displayMode: "findings",
+    },
+    {
+      id: "sg-auction",
+      title: "Strategic Findings Auction",
+      description:
+        "Each panelist drafts the strongest set of findings for the question under their name.",
+      plannedStart: "11:35",
+      plannedMinutes: 35,
+      displayMode: "auction",
+      operatorNotes:
+        "If still in round 2 at 12:00, call the final round at 60 seconds a lot with no rationale until the defenses.",
+    },
+    {
+      id: "sg-defenses",
+      title: "Team Defenses",
+      description: "Each panelist makes the case for the portfolio they built.",
+      plannedStart: "12:10",
+      plannedMinutes: 8,
+      displayMode: "portfolios",
+    },
+    {
+      id: "sg-synthesis",
+      title: "Audience vs Panel and Synthesis",
+      description: "What the room would have paid, against what the panel actually paid.",
+      plannedStart: "12:18",
+      plannedMinutes: 10,
+      displayMode: "audience",
+    },
+    {
+      id: "sg-close",
+      title: "Close",
+      description: "What happens with this material next.",
+      plannedStart: "12:28",
+      plannedMinutes: 2,
+      displayMode: "card",
+    },
+    {
+      id: "sg-lunch",
+      title: "Lunch",
+      description: "Thank you for coming.",
+      plannedStart: "12:30",
+      plannedMinutes: 60,
+      displayMode: "card",
+    },
+  ];
+
+  return { ...emptySchedule(), segments };
+}
 
 // --- Demo findings ---------------------------------------------------------
 
@@ -520,6 +694,7 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
       label: "Breakout working session",
       visible: false,
     },
+    runOfShow: createRunOfShow(),
     revision: 1,
   };
 }

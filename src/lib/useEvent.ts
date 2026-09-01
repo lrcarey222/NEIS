@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { currentMode, net, type Mode, type Presence } from "./net";
+import { serverNow } from "./schedule";
 import type { EventState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,43 @@ export function useEvent(room = "viewer"): UseEventResult {
         : "local";
 
   return { state, status, mode, loaded };
+}
+
+/**
+ * The shared clock, corrected for this device's skew against the server.
+ *
+ * Two things matter here. The offset is subscribed once and kept in state, so
+ * every screen's arithmetic lands on the same timebase — two browsers on the
+ * same event show the same remaining time. And the local `setInterval` only
+ * ever calls `setState`: it never writes, which is what keeps a room with
+ * eight screens open from generating eight database writes a second.
+ *
+ * `tickMs` of 0 subscribes to the offset without ticking, for callers that
+ * only need to stamp a time rather than render a countdown.
+ */
+export function useServerClock(tickMs = 250): { now: number; offsetMs: number } {
+  const [offsetMs, setOffsetMs] = useState(0);
+  const [localNow, setLocalNow] = useState(() => Date.now());
+
+  useEffect(() => net().subscribeClockOffset(setOffsetMs), []);
+
+  useEffect(() => {
+    if (tickMs <= 0) return;
+    const id = setInterval(() => setLocalNow(Date.now()), tickMs);
+    return () => clearInterval(id);
+  }, [tickMs]);
+
+  return { now: serverNow(localNow, offsetMs), offsetMs };
+}
+
+/**
+ * The server time right now, for stamping a write.
+ *
+ * Read through the same offset every screen renders with, so the stamp an
+ * operator's laptop writes is the one the projector counts down from.
+ */
+export function stampNow(offsetMs: number): number {
+  return serverNow(Date.now(), offsetMs);
 }
 
 /** Which rooms currently have a browser open. Used by the control room. */

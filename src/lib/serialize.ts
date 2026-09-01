@@ -1,3 +1,4 @@
+import { emptySchedule } from "./schedule";
 import { createEvent, LEGACY_ROUND_COUNT } from "./seed";
 import {
   type AudienceEntry,
@@ -5,7 +6,10 @@ import {
   type EventState,
   type Finding,
   type Panelist,
+  type Phase,
   SCHEMA_VERSION,
+  type ScheduleState,
+  type Segment,
   type TimerState,
   type Transaction,
 } from "./types";
@@ -144,6 +148,102 @@ function normaliseAudience(entry: Partial<AudienceEntry>, id: string): AudienceE
   };
 }
 
+// --- The run of show -------------------------------------------------------
+
+/**
+ * A plain list that came back from RTDB.
+ *
+ * A segment's `phases` and `speakers` have no ids to key by, so they are
+ * stored as real arrays — which RTDB returns as an object keyed "0","1","2"
+ * once anything edits them, and as an array otherwise. Both shapes have to
+ * read back in order or the breakout's phase strip silently reorders itself
+ * mid-session.
+ */
+function toList<T>(value: unknown): T[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((item) => item != null) as T[];
+  if (typeof value !== "object") return [];
+  return Object.entries(value as Record<string, T>)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, item]) => item)
+    .filter((item) => item != null);
+}
+
+function normalisePhase(phase: Partial<Phase>): Phase {
+  return {
+    title: phase.title ?? "",
+    minutes: Number(phase.minutes) || 0,
+    ...(phase.note ? { note: phase.note } : {}),
+  };
+}
+
+function normaliseSegment(segment: Partial<Segment>, id: string): Segment {
+  const phases = toList<Partial<Phase>>(segment.phases).map(normalisePhase);
+  const speakers = toList<string>(segment.speakers).filter(
+    (name) => typeof name === "string" && name.trim().length > 0,
+  );
+
+  return {
+    id: segment.id ?? id,
+    title: segment.title ?? "Segment",
+    description: segment.description ?? "",
+    speakers,
+    owner: segment.owner ?? "",
+    operatorNotes: segment.operatorNotes ?? "",
+    plannedStart: segment.plannedStart ?? "",
+    plannedMinutes: Math.max(0, Number(segment.plannedMinutes) || 0),
+    displayMode: segment.displayMode ?? "card",
+    phases,
+    presentationTimer: segment.presentationTimer ?? false,
+    presentationSeconds: Number(segment.presentationSeconds) || 150,
+    presenterCount: Math.max(0, Number(segment.presenterCount) || 0),
+  };
+}
+
+/**
+ * The schedule, from whatever the database returned.
+ *
+ * An event with no `runOfShow` at all — every rehearsal and demo event written
+ * before schema 3 — gets an empty one rather than an error. Every screen
+ * renders an empty schedule as "no run of show loaded" and carries on, so the
+ * only thing an old event loses is the agenda strip.
+ */
+function normaliseSchedule(raw: unknown): ScheduleState {
+  const empty = emptySchedule();
+  if (!raw || typeof raw !== "object") return empty;
+  const data = raw as Partial<ScheduleState> & { segments?: unknown };
+
+  // Segments carry ids, so they are stored as a keyed map like every other
+  // collection — but `sortOrder` would be a second source of truth for
+  // something the array already says, so order comes from an explicit list.
+  const segments = toArray<Segment>(data.segments).map((s) => normaliseSegment(s, s.id));
+  const order = toList<string>((data as { segmentOrder?: unknown }).segmentOrder);
+  if (order.length > 0) {
+    const byId = new Map(segments.map((s) => [s.id, s]));
+    const ordered = order.map((id) => byId.get(id)).filter(Boolean) as Segment[];
+    // Anything not named in the order list still has to appear, or an
+    // interrupted reorder would drop a segment off the agenda entirely.
+    for (const segment of segments) {
+      if (!order.includes(segment.id)) ordered.push(segment);
+    }
+    segments.splice(0, segments.length, ...ordered);
+  }
+
+  return {
+    segments,
+    activeSegmentId: data.activeSegmentId ?? null,
+    segmentStartedAt: data.segmentStartedAt ?? null,
+    pausedAt: data.pausedAt ?? null,
+    pausedMs: Number(data.pausedMs) || 0,
+    dayStartedAt: data.dayStartedAt ?? null,
+    presenterIndex: Number.isFinite(data.presenterIndex)
+      ? Number(data.presenterIndex)
+      : -1,
+    presenterStartedAt: data.presenterStartedAt ?? null,
+    agendaVisible: data.agendaVisible ?? true,
+  };
+}
+
 /**
  * Builds a complete EventState from whatever the database returned.
  *
@@ -211,6 +311,7 @@ export function fromSnapshot(raw: unknown): EventState | null {
       normaliseAudience(a, a.id),
     ),
     timer: { ...DEFAULT_TIMER, ...((data.timer as Partial<TimerState>) ?? {}) },
+    runOfShow: normaliseSchedule(data.runOfShow),
     revision: (data.revision as number) ?? 0,
   };
 }
@@ -225,6 +326,13 @@ export function toSnapshot(state: EventState): Record<string, unknown> {
     transactions: toMap(state.transactions),
     audience: toMap(state.audience),
     timer: state.timer,
+    runOfShow: {
+      ...state.runOfShow,
+      // Keyed by id like every other collection, with the order carried
+      // alongside — RTDB does not preserve the order of an object's keys.
+      segments: toMap(state.runOfShow.segments),
+      segmentOrder: state.runOfShow.segments.map((s) => s.id),
+    },
     revision: state.revision,
   });
 }

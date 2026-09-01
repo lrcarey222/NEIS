@@ -47,6 +47,12 @@ export const DISPLAY_MODES = [
   "audience",
   /** The pre-session briefing: how to join, what to write, what happens next. */
   "instructions",
+  /**
+   * A title card for the segment currently running: name, description,
+   * speakers, clock. This is what fills the opening panel, the transitions and
+   * the close — stretches where the projector otherwise had nothing to show.
+   */
+  "card",
 ] as const;
 export type DisplayMode = (typeof DISPLAY_MODES)[number];
 
@@ -67,6 +73,99 @@ export interface TimerState {
   label: string;
   /** When false, /display hides the timer entirely. */
   visible: boolean;
+}
+
+// --- The run of show -------------------------------------------------------
+
+/**
+ * What the projector switches to when a segment is advanced.
+ *
+ * Named for what the segment *is* rather than for the display mode it happens
+ * to use, which is why "findings" here is "board" there — three different
+ * segments (the breakouts, the presentations, the panel questions) all sit on
+ * the findings board, and calling them "board" segments would say nothing
+ * about the day.
+ */
+export const SEGMENT_KINDS = [
+  "card",
+  "instructions",
+  "findings",
+  "auction",
+  "portfolios",
+  "audience",
+] as const;
+export type SegmentKind = (typeof SEGMENT_KINDS)[number];
+
+export const DISPLAY_MODE_FOR_SEGMENT: Record<SegmentKind, DisplayMode> = {
+  card: "card",
+  instructions: "instructions",
+  findings: "board",
+  auction: "auction",
+  portfolios: "portfolios",
+  audience: "audience",
+};
+
+/**
+ * One step inside a segment — the breakout's internal run of show.
+ *
+ * This is the mitigation for the biggest risk in the day: a room that talks
+ * for seventy minutes and writes for five. The phase strip at minute 35 says
+ * "open your cards and start typing", and it is on the facilitator's screen
+ * whether or not anyone is watching the clock.
+ */
+export interface Phase {
+  title: string;
+  minutes: number;
+  note?: string;
+}
+
+export interface Segment {
+  id: string;
+  title: string;
+  /** One or two sentences, projected on the title card. */
+  description?: string;
+  speakers?: string[];
+  /** Who is running it. Operator view only — never projected. */
+  owner?: string;
+  /** Speaker notes for the operator. Never projected. */
+  operatorNotes?: string;
+  /** Wall clock, "08:30". For the printed agenda and the operator's view. */
+  plannedStart: string;
+  plannedMinutes: number;
+  displayMode: SegmentKind;
+  phases?: Phase[];
+  /** Runs the hard-timed per-presenter sub-clock. See lib/schedule.ts. */
+  presentationTimer?: boolean;
+  /** Seconds each presenter gets. Defaults to 150. */
+  presentationSeconds?: number;
+  /** How many presenters to track, so the operator can see 3 done, 2 left. */
+  presenterCount?: number;
+}
+
+/**
+ * Where the day has got to.
+ *
+ * Every screen computes remaining time locally from `segmentStartedAt`, which
+ * is why this record holds a start stamp and never a countdown: a room with
+ * eight screens open must not generate eight writes a second. Nothing in here
+ * is written on a timer — only when the operator clicks.
+ */
+export interface ScheduleState {
+  segments: Segment[];
+  activeSegmentId: string | null;
+  /** Server epoch ms, so every screen agrees. Null before the day starts. */
+  segmentStartedAt: number | null;
+  /** Server epoch ms the clock was held at, or null when running. */
+  pausedAt: number | null;
+  /** Paused milliseconds accumulated within the active segment. */
+  pausedMs: number;
+  /** Stamped by the first advance. Drift is measured against it. */
+  dayStartedAt: number | null;
+  /** -1 when the presentation sub-timer has not been started. */
+  presenterIndex: number;
+  presenterStartedAt: number | null;
+  /** The thin agenda band along the bottom of /display. */
+  agendaVisible: boolean;
 }
 
 export interface EventConfig {
@@ -207,6 +306,8 @@ export interface EventState {
   transactions: Transaction[];
   audience: AudienceEntry[];
   timer: TimerState;
+  /** The agenda, the clock and where the day has got to. See lib/schedule.ts. */
+  runOfShow: ScheduleState;
   /** Monotonic counter; every mutation increments it. Clients use it to
    *  discard out-of-order snapshots that arrive over a flaky connection. */
   revision: number;

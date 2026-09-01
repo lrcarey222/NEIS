@@ -136,6 +136,7 @@ function ModeIndicator({
     portfolios: "Final Portfolios",
     audience: "Audience vs Panel",
     instructions: "Instructions",
+    card: "Segment Card",
   };
 
   return (
