@@ -136,6 +136,7 @@ test("a panelist cannot hold more findings than there are rounds", () => {
 
 test("any panelist may take any finding — nothing constrains the combination", () => {
   const state = demo();
+  state.event.roundCount = 5;
   const panelistId = state.panelists[0].id;
 
   // Five findings from a single breakout, all of one panelist's picks.
@@ -186,6 +187,7 @@ test("bids below the minimum are rejected", () => {
 
 test("the budget reserve is a warning by default and an error when enforced", () => {
   const state = demo();
+  state.event.roundCount = 5;
 
   // 98 of 100 on the first of five picks leaves 2 credits for 4 more.
   const input = {
@@ -206,6 +208,7 @@ test("the budget reserve is a warning by default and an error when enforced", ()
 
 test("maxSafeBid reserves one minimum bid for each remaining pick", () => {
   const state = demo();
+  state.event.roundCount = 5;
   state.event.minBid = 2;
 
   const view = allPanelistViews(state)[0];
@@ -314,6 +317,7 @@ test("a round is complete only once every panelist has picked in it", () => {
 
 test("a full five-round draft fills every portfolio and summarises correctly", () => {
   const state = demo();
+  state.event.roundCount = 5;
   const prices = [
     [18, 20, 14, 9, 11],
     [22, 12, 25, 8, 7],
@@ -355,6 +359,64 @@ test("a full five-round draft fills every portfolio and summarises correctly", (
   );
   const paid = summary.highestValued.map((v) => v.transaction.price);
   assert.deepEqual(paid, [...paid].sort((a, b) => b - a));
+});
+
+test("a new event defaults to five panelists, three rounds and 100 credits", () => {
+  const state = createEvent({});
+  assert.equal(state.panelists.length, 5);
+  assert.equal(state.event.roundCount, 3);
+  assert.equal(state.event.startingBudget, 100);
+  assert.ok(state.panelists.every((p) => p.startingBudget === 100));
+});
+
+test("a 3-round, 5-panelist draft reconciles to the correct totals", () => {
+  const state = demo();
+  state.event.roundCount = 3;
+  assert.equal(state.panelists.length, 5);
+
+  const prices = [
+    [30, 25, 20],
+    [40, 15, 10],
+    [22, 22, 22],
+    [50, 30, 15],
+    [12, 8, 5],
+  ];
+
+  for (let round = 0; round < 3; round++) {
+    state.panelists.forEach((panelist, seat) => {
+      award(state, {
+        findingId: firstAvailable(state),
+        panelistId: panelist.id,
+        price: prices[seat][round],
+      });
+    });
+  }
+
+  assert.equal(state.transactions.length, 15);
+  assert.equal(availableFindings(state).length, 10, "ten findings go undrafted");
+
+  allPanelistViews(state).forEach((view, seat) => {
+    assert.equal(view.slots.length, 3, `${view.panelist.name} has three slots`);
+    assert.equal(view.filledCount, 3);
+    assert.equal(view.openCount, 0);
+    assert.equal(view.spent, prices[seat].reduce((a, b) => a + b, 0));
+    assert.equal(view.spent + view.remaining, view.startingBudget);
+  });
+
+  // A full team refuses a fourth pick even with credits to spare.
+  const full = validateAward(state, {
+    findingId: firstAvailable(state),
+    panelistId: state.panelists[4].id,
+    price: 5,
+  });
+  assert.equal(full.ok, false);
+  assert.ok(full.errors.some((e) => e.code === "team_full"));
+
+  const summary = buildSummary(state);
+  assert.equal(summary.draftedFindings, 15);
+  assert.equal(summary.undrafted.length, 10);
+  assert.equal(summary.totalSpent, prices.flat().reduce((a, b) => a + b, 0));
+  assert.equal(summary.totalBudget, 500);
 });
 
 // --- Roles ------------------------------------------------------------------

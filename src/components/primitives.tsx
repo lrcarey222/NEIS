@@ -14,6 +14,19 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 }
 
 /**
+ * Column count for a panelist grid, as a literal Tailwind class.
+ *
+ * The panel is whoever turns up — five by default, but the operator can add or
+ * remove seats in Setup — so neither the auction board nor the portfolio
+ * screen may hardcode a width. Capped at six: past that the columns stop being
+ * legible at 16:9, and wrapping to a second row keeps them readable.
+ */
+export function panelistColumns(count: number): string {
+  const columns = ["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5", "grid-cols-6"];
+  return columns[Math.max(1, Math.min(columns.length, count)) - 1];
+}
+
+/**
  * Finding-type badge. The glyph and the word are always rendered — colour is
  * the third signal, never the only one.
  */

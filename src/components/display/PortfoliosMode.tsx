@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { cx } from "@/components/primitives";
+import { cx, panelistColumns } from "@/components/primitives";
 import { FINDING_TYPE_META } from "@/lib/types";
 import {
   allPanelistViews,
@@ -76,16 +76,7 @@ function PortfolioGrid({
 }) {
   return (
     <div
-      className={cx(
-        "grid min-h-0 flex-1 gap-[0.75em]",
-        panelists.length <= 2
-          ? "grid-cols-2"
-          : panelists.length === 3
-            ? "grid-cols-3"
-            : panelists.length === 4
-              ? "grid-cols-4"
-              : "grid-cols-5",
-      )}
+      className={cx("grid min-h-0 flex-1 gap-[0.75em]", panelistColumns(panelists.length))}
     >
       {panelists.map((view) => (
         <PortfolioCard
@@ -231,6 +222,9 @@ function PortfolioCard({
   onOpenFinding: (v: FindingView) => void;
 }) {
   const breakouts = state.breakouts;
+  // Three picks instead of five leaves real vertical room in each card, so the
+  // headline gets more of itself rather than the card getting more whitespace.
+  const roomy = view.slots.length <= 3;
 
   return (
     <article
@@ -299,7 +293,14 @@ function PortfolioCard({
                 onClick={() => onOpenFinding(buildFindingView(state, slot.finding!))}
                 className="mt-[0.3em] w-full text-left"
               >
-                <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">
+                <p
+                  className={cx(
+                    "text-paper leading-snug font-medium",
+                    roomy
+                      ? "line-clamp-5 text-[0.875em]"
+                      : "line-clamp-2 text-[0.75em]",
+                  )}
+                >
                   {slot.finding.headline}
                 </p>
                 {/* Type, source breakout and price on one line — five of these

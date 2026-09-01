@@ -90,8 +90,23 @@ export const PANELIST_BLUEPRINT: Omit<Panelist, "startingBudget">[] =
     sortOrder: index,
   }));
 
-/** Findings each panelist ends up holding, and therefore rounds of bidding. */
-export const DEFAULT_ROUND_COUNT = 5;
+/**
+ * Findings each panelist ends up holding, and therefore rounds of bidding.
+ *
+ * Three, not five: the auction has 35 minutes in the run of show and five
+ * panelists to get round, and three picks each is what actually fits. It also
+ * makes each pick cost something to make, which is the point of the exercise.
+ */
+export const DEFAULT_ROUND_COUNT = 3;
+
+/**
+ * What a schema 1 event ran, before `roundCount` existed.
+ *
+ * Deliberately a separate constant from the default above: those events had
+ * five strategic objectives and therefore five picks, and lowering the new
+ * default must not retroactively shrink a portfolio someone already drafted.
+ */
+export const LEGACY_ROUND_COUNT = 5;
 
 // --- Demo findings ---------------------------------------------------------
 
@@ -444,7 +459,7 @@ export interface CreateEventOptions {
   subtitle?: string;
   startingBudget?: number;
   minBid?: number;
-  /** Findings each panelist ends up holding. Defaults to 5. */
+  /** Findings each panelist ends up holding. Defaults to 3. */
   roundCount?: number;
   /** Include the 25 demo findings, pre-submitted and ready to auction. */
   demo?: boolean;

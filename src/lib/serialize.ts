@@ -1,4 +1,4 @@
-import { createEvent, DEFAULT_ROUND_COUNT } from "./seed";
+import { createEvent, LEGACY_ROUND_COUNT } from "./seed";
 import {
   type AudienceEntry,
   type Breakout,
@@ -170,8 +170,9 @@ export function fromSnapshot(raw: unknown): EventState | null {
       minBid: event.minBid ?? 1,
       startingBudget: event.startingBudget ?? 100,
       // Absent on a schema 1 event, which ran five strategic objectives and so
-      // gave every panelist five picks.
-      roundCount: event.roundCount ?? DEFAULT_ROUND_COUNT,
+      // gave every panelist five picks. Not the current default — that would
+      // shrink a portfolio somebody already drafted.
+      roundCount: event.roundCount ?? LEGACY_ROUND_COUNT,
       currentRoundIndex: event.currentRoundIndex ?? -1,
       displayMode: event.displayMode ?? "board",
       status: event.status ?? "setup",
