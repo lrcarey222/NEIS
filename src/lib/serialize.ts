@@ -61,15 +61,39 @@ const DEFAULT_TIMER: TimerState = {
   visible: false,
 };
 
+/**
+ * Schema 2 → 3: fold `whatChanged` into `whyItMatters`.
+ *
+ * The field is gone from the form, but a rehearsal event — or the real one,
+ * mid-session, if this ships between the breakouts and the auction — has text
+ * in it that a room wrote. Appending rather than dropping means the migration
+ * cannot lose a sentence.
+ *
+ * Done on read and not written back, so it has to be idempotent: once the text
+ * is present in `whyItMatters` the next load leaves it alone.
+ */
+function foldWhatChanged(whyItMatters: string, whatChanged: string): string {
+  const legacy = whatChanged.trim();
+  const why = whyItMatters.trim();
+  if (!legacy || why.includes(legacy)) return whyItMatters;
+  return why ? `${why}\n\n${legacy}` : legacy;
+}
+
 function normaliseFinding(finding: Partial<Finding>, id: string): Finding {
   return {
     id: finding.id ?? id,
     breakoutId: finding.breakoutId ?? "",
     type: finding.type ?? "momentum",
     headline: finding.headline ?? "",
+    // Retained verbatim so nothing is deleted from the record, but no screen
+    // reads it any more — the text the room wrote reaches them through
+    // `whyItMatters` below.
     whatChanged: finding.whatChanged ?? "",
     evidence: finding.evidence ?? "",
-    whyItMatters: finding.whyItMatters ?? "",
+    whyItMatters: foldWhatChanged(
+      finding.whyItMatters ?? "",
+      finding.whatChanged ?? "",
+    ),
     confidence: finding.confidence ?? "medium",
     breakoutRank: finding.breakoutRank ?? 1,
     dissent: finding.dissent ?? "",

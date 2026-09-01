@@ -95,10 +95,16 @@ export const DEFAULT_ROUND_COUNT = 5;
 
 // --- Demo findings ---------------------------------------------------------
 
+/**
+ * These are the room's model of what a good finding looks like, so they are
+ * written to the same targets the form asks for: a headline that is a
+ * conclusion in under twenty words, two evidence bullets of under fifteen, and
+ * a why-it-matters under forty. A demo finding that ran long would teach every
+ * facilitator to run long.
+ */
 interface SeedFinding {
   type: FindingType;
   headline: string;
-  whatChanged: string;
   evidence: string;
   whyItMatters: string;
   confidence: Finding["confidence"];
@@ -111,67 +117,57 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "momentum",
       headline:
-        "Grid-equipment manufacturing is moving from policy ambition to bankable industrial demand.",
-      whatChanged:
-        "Transformer, switchgear, cable and breaker orders have shifted from speculative to contracted, with multi-year backlogs giving manufacturers the demand visibility they said was missing. Domestic capacity announcements are increasingly tied to signed offtake rather than to incentive availability alone.",
+        "Grid-equipment orders have moved from speculative to contracted, with multi-year backlogs giving manufacturers real demand visibility.",
       evidence:
-        "• Multi-year order backlogs reported across large-power-transformer and medium-voltage equipment suppliers\n• Utility procurement moving to framework agreements and reserved slots rather than project-by-project bidding\n• New and expanded U.S. plants tied to named utility customers instead of speculative capacity",
+        "• Multi-year order backlogs across transformer, switchgear and medium-voltage suppliers\n• New U.S. plants tied to named utility customers, not to incentives",
       whyItMatters:
-        "Equipment demand is the one segment where U.S. industrial expansion is being pulled by physical need rather than pushed by subsidy — which makes it far more resilient to policy reversal.",
+        "This is the one segment where U.S. industrial expansion is pulled by physical need rather than pushed by subsidy, which makes it far more resilient to policy reversal.",
       confidence: "high",
       breakoutRank: 1,
     },
     {
       type: "fragility",
       headline:
-        "The battery manufacturing pipeline remains substantially larger than credible near-term domestic demand.",
-      whatChanged:
-        "Announced U.S. cell capacity continues to exceed plausible domestic offtake through the end of the decade, and the gap widened as EV sales growth moderated. Several announced plants have been delayed, rescoped toward storage, or quietly shelved.",
+        "Announced U.S. battery cell capacity still exceeds credible domestic demand through 2030, and the gap widened.",
       evidence:
-        "• Announced nameplate cell capacity materially above realistic domestic demand ranges\n• Repeated schedule slips and rescoping of announced greenfield plants\n• Grid-storage offtake absorbing some, but not all, of the redirected volume",
+        "• Nameplate cell capacity well above realistic domestic demand ranges\n• Announced greenfield plants repeatedly delayed, rescoped toward storage, or shelved",
       whyItMatters:
         "An overbuilt pipeline that consolidates disorderly produces stranded assets, regional job losses, and exactly the political backlash that makes the next industrial policy harder to pass.",
       confidence: "medium",
       breakoutRank: 2,
       dissent:
-        "A minority view held that storage and export demand will absorb most of the apparent overhang, and that the pipeline is closer to right-sized than headline figures suggest.",
+        "A minority held that storage and export demand will absorb most of the apparent overhang, and the pipeline is closer to right-sized than headline figures suggest.",
     },
     {
       type: "bottleneck",
       headline:
-        "Power-ready sites and project-delivery capacity increasingly matter more than headline incentive packages.",
-      whatChanged:
-        "The binding constraint on new plants has migrated from capital cost to time-to-power. Sites with secured interconnection, water, and permits now command large premiums, and the scarce input is the engineering and construction workforce that can actually deliver them.",
+        "Time-to-power, not capital cost, is now the binding constraint on new industrial plants.",
       evidence:
-        "• Interconnection and energisation timelines cited as the top siting factor in recent industrial location decisions\n• Premiums paid for pre-permitted, power-ready industrial parcels\n• Persistent shortages of electricians, pipefitters and construction managers in active industrial corridors",
+        "• Interconnection timelines cited as the top factor in recent siting decisions\n• Large premiums paid for pre-permitted, power-ready industrial parcels",
       whyItMatters:
-        "If time-to-power rather than capital is the constraint, then incentive competitions between states are largely redistributive, and the policy lever that matters is site readiness.",
+        "If time-to-power rather than capital is the constraint, incentive competitions between states are largely redistributive, and the policy lever that actually matters is site readiness.",
       confidence: "high",
       breakoutRank: 3,
     },
     {
       type: "opportunity",
       headline:
-        "Manufacturing machinery, automation, and power electronics may create more durable competitive advantage than additional final assembly.",
-      whatChanged:
-        "Attention has concentrated on final assembly, while the capital-equipment and power-electronics layers beneath it remain heavily imported. These are higher-margin, more defensible, and harder for competitors to displace once established.",
+        "Machinery, automation and power electronics build more durable advantage than another final assembly plant.",
       evidence:
-        "• Continued import dependence for coating, calendering and forming equipment\n• Power-electronics content rising as a share of value in both vehicles and grid equipment\n• Capital-equipment suppliers historically retaining margin through demand cycles better than assemblers",
+        "• Coating, calendering and forming equipment still overwhelmingly imported\n• Power electronics a rising share of value in vehicles and grid equipment",
       whyItMatters:
-        "Assembly plants can be relocated; toolmakers and power-electronics suppliers accumulate process knowledge that travels much less easily.",
+        "Assembly plants can be relocated. Toolmakers and power-electronics suppliers accumulate process knowledge that travels much less easily, so the advantage compounds instead of moving with the next incentive.",
       confidence: "medium",
       breakoutRank: 4,
     },
     {
       type: "wildcard",
       headline:
-        "The United States may establish minimum strategic magnet capacity without creating a globally competitive commercial industry.",
-      whatChanged:
-        "Mine-to-magnet investment has advanced far enough to plausibly cover defence and critical civilian needs, but not far enough to compete on cost in open commercial markets. The likely landing point is a small protected industry rather than a competitive one.",
+        "The U.S. may end up with strategic-minimum magnet capacity but no commercially competitive magnet industry.",
       evidence:
-        "• Announced separation and magnet facilities sized closer to strategic minimums than to merchant scale\n• Persistent cost gap against incumbent producers at current input prices\n• Offtake concentrated in defence and price-insensitive segments",
+        "• Announced separation and magnet plants sized near strategic minimums, not merchant scale\n• Persistent cost gap against incumbents, with offtake concentrated in defence",
       whyItMatters:
-        "A strategic-minimum outcome is a legitimate policy choice, but it should be chosen deliberately and funded as such rather than arrived at by accident while claiming commercial success.",
+        "A strategic minimum is a legitimate choice, but it should be chosen deliberately and funded as such, not arrived at by accident while claiming commercial success.",
       confidence: "low",
       breakoutRank: 5,
     },
@@ -180,13 +176,11 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "momentum",
       headline:
-        "U.S. battery cell output has reached the scale where domestic cost curves, not import parity, set the benchmark.",
-      whatChanged:
-        "Operating domestic gigafactories moved from commissioning into steady-state yields, and cell costs from mature U.S. lines are now close enough to imported benchmarks that sourcing decisions turn on logistics and contract terms rather than on a structural cost penalty.",
+        "Mature U.S. cell lines now price close enough to imports that sourcing turns on logistics, not cost.",
       evidence:
-        "• Multiple large U.S. cell plants running at or near design yield\n• Narrowing gap between domestic and landed imported cell costs\n• Automaker sourcing decisions citing supply security alongside price",
+        "• Multiple large U.S. cell plants running at or near design yield\n• Sourcing decisions citing supply security alongside price",
       whyItMatters:
-        "Once domestic cells are cost-competitive without a subsidy bridge, the entire downstream vehicle strategy stops depending on trade policy holding still.",
+        "Once domestic cells compete without a subsidy bridge, the whole downstream vehicle strategy stops depending on trade policy holding still.",
       confidence: "medium",
       breakoutRank: 2,
     },
@@ -194,23 +188,19 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       type: "fragility",
       headline:
         "Vehicle affordability, not charging or range, is now the binding barrier to sustained EV adoption.",
-      whatChanged:
-        "Consumer objections have shifted decisively toward sticker price and insurance and repair costs. Incentive changes exposed how much of recent demand was price-supported, and the sub-$30,000 segment remains thinly served by domestic manufacturers.",
       evidence:
-        "• Demand softening concentrated in entry price bands after incentive changes\n• Insurance and collision-repair costs rising faster for EVs than for comparable ICE vehicles\n• Few domestically built models positioned below the mass-market price threshold",
+        "• Demand softening concentrated in entry price bands after incentive changes\n• Insurance and repair costs rising faster for EVs than comparable ICE vehicles",
       whyItMatters:
-        "A transition that only serves buyers above the median income is politically fragile and commercially capped, regardless of how good the technology gets.",
+        "A transition that only serves buyers above the median income is politically fragile and commercially capped, however good the technology gets.",
       confidence: "high",
       breakoutRank: 1,
     },
     {
       type: "bottleneck",
       headline:
-        "Cathode and anode active material capacity, not cell assembly, is the real chokepoint in the domestic battery chain.",
-      whatChanged:
-        "Cell assembly capacity scaled far faster than the upstream materials that feed it. Domestic cathode qualification runs years behind cell commissioning, leaving nominally domestic cells dependent on imported active material.",
+        "Cathode and anode material capacity, not cell assembly, is the real chokepoint in the battery chain.",
       evidence:
-        "• Domestic CAM and AAM capacity lagging announced cell capacity by a wide margin\n• Multi-year qualification cycles for new cathode sources\n• Graphite and precursor supply still concentrated in a small number of overseas suppliers",
+        "• Domestic CAM and AAM capacity lags announced cell capacity by a wide margin\n• Graphite and precursor supply concentrated in a few overseas suppliers",
       whyItMatters:
         "Content rules and supply-security claims are only as strong as the weakest upstream link, and today that link is materials rather than cells.",
       confidence: "high",
@@ -219,11 +209,9 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "opportunity",
       headline:
-        "Commercial fleets and medium-duty vehicles offer better near-term economics than the consumer market receiving most attention.",
-      whatChanged:
-        "Depot-charged fleets with predictable duty cycles reached total-cost parity ahead of consumer segments, and operators buy on spreadsheet economics rather than sentiment. This demand is largely invisible in the consumer-focused public debate.",
+        "Depot-charged commercial fleets reached total-cost parity ahead of the consumer market getting all the attention.",
       evidence:
-        "• Total-cost-of-ownership crossover reached earlier for high-utilisation depot fleets\n• Fleet purchasers citing fuel and maintenance savings as the deciding factor\n• Predictable duty cycles removing range and charging objections",
+        "• Cost-of-ownership crossover reached earlier for high-utilisation depot fleets\n• Fleet buyers citing fuel and maintenance savings as the deciding factor",
       whyItMatters:
         "Fleet volume stabilises factory utilisation while the consumer market works through its affordability problem, and it is far less exposed to political mood.",
       confidence: "medium",
@@ -232,11 +220,9 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "wildcard",
       headline:
-        "Low-cost vehicles from non-U.S. producers entering third markets could reset global cost expectations faster than domestic policy can respond.",
-      whatChanged:
-        "Competitive low-cost EVs have scaled rapidly across Europe, Latin America and Southeast Asia. Even fully excluded from the U.S. market, they reset what global buyers and suppliers consider a normal price for a competent electric vehicle.",
+        "Low-cost EVs scaling in third markets could reset global price expectations faster than U.S. policy can respond.",
       evidence:
-        "• Rapid share gains for low-cost exporters in open third markets\n• Price points well below comparable U.S.-built models\n• Supplier and component pricing increasingly benchmarked to those platforms",
+        "• Rapid share gains for low-cost exporters across Europe, Latin America, Southeast Asia\n• Supplier and component pricing increasingly benchmarked to those platforms",
       whyItMatters:
         "Tariffs can protect a domestic market but cannot protect domestic exporters, and a cost benchmark set elsewhere eventually reaches U.S. balance sheets.",
       confidence: "low",
@@ -248,36 +234,30 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       type: "momentum",
       headline:
         "Hyperscaler power purchase agreements have created a genuine merchant market for clean firm capacity.",
-      whatChanged:
-        "Large compute buyers signed long-tenor, high-price contracts for nuclear, geothermal and firm hybrid supply — including restart and uprate deals that no utility procurement process would have produced. Clean firm now has a customer willing to pay for reliability.",
       evidence:
-        "• Multi-decade PPAs signed for existing and restarted nuclear capacity\n• Next-generation geothermal contracted directly with compute buyers\n• Contract prices well above prevailing wholesale benchmarks",
+        "• Multi-decade PPAs signed for existing, restarted and uprated nuclear capacity\n• Contract prices well above prevailing wholesale benchmarks",
       whyItMatters:
-        "First-of-a-kind clean firm projects failed for lack of a creditworthy buyer. That buyer now exists, and it is not the regulated utility everyone was waiting for.",
+        "First-of-a-kind clean firm projects failed for want of a creditworthy buyer. That buyer now exists, and it is not the regulated utility everyone was waiting for.",
       confidence: "high",
       breakoutRank: 1,
     },
     {
       type: "fragility",
       headline:
-        "Advanced nuclear cost credibility still rests on a very small number of projects that have not yet been built.",
-      whatChanged:
-        "Order books and site agreements grew considerably, but the cost claims underpinning them remain largely unvalidated by completed construction. The sector is being financed on projected nth-of-a-kind economics while still executing first-of-a-kind builds.",
+        "Advanced nuclear is being financed on nth-of-a-kind costs while still executing first-of-a-kind builds.",
       evidence:
-        "• Order announcements substantially outnumbering units under active construction\n• Cost projections premised on learning rates not yet demonstrated in the sector\n• Historical first-of-a-kind overruns not yet clearly broken",
+        "• Order announcements far outnumber units under active construction\n• Cost projections assume learning rates the sector has not yet demonstrated",
       whyItMatters:
-        "If the first completed advanced units land far above projection, the financing market that just opened could close for a decade.",
+        "If the first completed advanced units land far above projection, the financing market that just opened could close again for a decade.",
       confidence: "medium",
       breakoutRank: 2,
     },
     {
       type: "bottleneck",
       headline:
-        "Nuclear-qualified supply chain and workforce capacity constrain deployment more tightly than licensing does.",
-      whatChanged:
-        "Licensing reform advanced meaningfully, revealing the deeper constraint: too few qualified forging, large-component, and welding suppliers, and too few workers carrying nuclear-grade quality credentials. Lead times for critical components did not improve with the regulatory timeline.",
+        "Nuclear-qualified suppliers and welders now constrain deployment more tightly than licensing does.",
       evidence:
-        "• Long lead times persisting for large forgings and reactor-grade components\n• Small number of suppliers holding the relevant quality certifications\n• Nuclear-qualified welder and inspector shortages cited across active projects",
+        "• Long lead times persist for large forgings and reactor-grade components\n• Nuclear-qualified welder and inspector shortages cited across active projects",
       whyItMatters:
         "Regulatory reform was the visible fight; the supply chain is the slow one, and it cannot be legislated into existence on the same timeline.",
       confidence: "high",
@@ -286,11 +266,9 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "opportunity",
       headline:
-        "Next-generation geothermal can reuse oil and gas drilling capability at a scale the debate consistently understates.",
-      whatChanged:
-        "Enhanced geothermal has been demonstrated at commercial flow rates using directional drilling and completion techniques transferred directly from unconventional oil and gas, with costs falling quickly across successive well sets.",
+        "Next-generation geothermal can reuse oil and gas drilling capability at a scale the debate understates.",
       evidence:
-        "• Commercial-scale demonstration projects delivering contracted power\n• Well costs declining materially across successive drilling campaigns\n• Crews, rigs and service companies transferring directly from shale operations",
+        "• Commercial-scale demonstrations delivering contracted power at falling well costs\n• Crews, rigs and service companies transferring directly from shale operations",
       whyItMatters:
         "It is the rare clean firm option with an existing skilled workforce, an existing supply chain, and a political constituency in energy-producing states.",
       confidence: "medium",
@@ -299,13 +277,11 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "wildcard",
       headline:
-        "Compute demand could shift location or intensity fast enough to strand firm capacity contracted against it.",
-      whatChanged:
-        "Efficiency gains in model training and inference, alongside aggressive international siting of new capacity, introduce real uncertainty about whether U.S. compute load grows along the trajectory that clean firm investment currently assumes.",
+        "Compute demand could move or thin out fast enough to strand the firm capacity contracted against it.",
       evidence:
-        "• Rapid efficiency improvements reducing energy per unit of useful compute\n• Growing share of announced capacity sited outside the United States\n• Load forecasts revised repeatedly and in both directions",
+        "• Efficiency gains cutting energy per unit of useful compute\n• Growing share of announced capacity sited outside the United States",
       whyItMatters:
-        "Clean firm assets last sixty years; the demand signal underwriting them has been stable for about three.",
+        "Clean firm assets last sixty years. The demand signal underwriting them has been stable for about three.",
       confidence: "low",
       breakoutRank: 5,
     },
@@ -314,24 +290,20 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "momentum",
       headline:
-        "Grid-enhancing technologies and advanced reconductoring moved from pilots into standard utility practice.",
-      whatChanged:
-        "Dynamic line rating, advanced power flow control and advanced conductors shifted from demonstration projects to line items in approved capital plans, unlocking capacity on existing rights of way in months rather than the decade a new corridor requires.",
+        "Grid-enhancing technologies and advanced reconductoring have moved from pilots into standard utility capital plans.",
       evidence:
-        "• Multiple utilities embedding GETs and reconductoring in approved capital plans\n• Measured capacity gains on existing corridors without new right-of-way\n• Regulators beginning to require GETs analysis before approving new-build alternatives",
+        "• Measured capacity gains on existing corridors without new right-of-way\n• Regulators starting to require GETs analysis before approving new build",
       whyItMatters:
-        "It is the only transmission capacity available on a timescale that matches the load growth already in the interconnection queue.",
+        "It is the only transmission capacity available on a timescale that matches the load growth already sitting in the interconnection queue.",
       confidence: "high",
       breakoutRank: 2,
     },
     {
       type: "fragility",
       headline:
-        "Retail rate increases are converting grid investment into a live political liability.",
-      whatChanged:
-        "Bills rose faster than general inflation across many service territories, and the connection between data-centre load growth and residential rates became a mainstream political argument. Cost-allocation fights are now the central risk to the build-out.",
+        "Retail rate increases have turned grid investment into a live political liability.",
       evidence:
-        "• Residential rate increases outpacing inflation in numerous jurisdictions\n• Large-load cost allocation emerging as a contested issue in rate cases\n• Affordability featuring prominently in state utility-commission politics",
+        "• Residential rates outpacing inflation across many service territories\n• Large-load cost allocation now contested in rate cases and commission politics",
       whyItMatters:
         "Every dollar of needed grid investment now has to survive an affordability argument, and that argument is currently being lost.",
       confidence: "high",
@@ -340,37 +312,31 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "bottleneck",
       headline:
-        "Interconnection reform has improved queue process without materially shortening time-to-energisation.",
-      whatChanged:
-        "Cluster studies and transition processes cleared substantial backlog, but projects still wait years between a completed study and actual energisation because the constraint moved downstream to network upgrades, equipment lead times and construction crews.",
+        "Interconnection reform cleared queue backlog without shortening the years between study and energisation.",
       evidence:
-        "• Queue backlogs reduced without proportionate improvement in energisation timelines\n• Network upgrade construction now the dominant share of total wait\n• Equipment lead times extending in parallel with process improvements",
+        "• Network upgrade construction now the dominant share of total wait\n• Equipment lead times extending in parallel with process improvements",
       whyItMatters:
-        "Reform effort concentrated on the part of the problem that was easiest to see, while the physical bottleneck went largely unaddressed.",
+        "Reform concentrated on the part of the problem that was easiest to see, while the physical bottleneck went largely unaddressed.",
       confidence: "high",
       breakoutRank: 3,
     },
     {
       type: "opportunity",
       headline:
-        "Flexible large-load interconnection lets new demand connect years earlier in exchange for curtailment during peak hours.",
-      whatChanged:
-        "Utilities and large-load customers began signing agreements in which the customer accepts curtailment during a small number of peak hours in return for dramatically faster connection. A handful of hours of flexibility unlocks a large share of existing headroom.",
+        "Flexible interconnection buys large loads years of earlier connection for a handful of curtailed hours.",
       evidence:
-        "• Flexible-load tariffs and bespoke agreements approved in several jurisdictions\n• Analysis showing large headroom available at modest curtailment obligations\n• Compute customers accepting curtailment terms to secure earlier energisation",
+        "• Flexible-load tariffs and bespoke agreements approved in several jurisdictions\n• Large headroom available at modest curtailment obligations",
       whyItMatters:
-        "It is the cheapest available capacity on the system and it requires contracts rather than construction.",
+        "It is the cheapest capacity available on the system and it requires contracts rather than construction, which is the only lever that moves on this timescale.",
       confidence: "medium",
       breakoutRank: 4,
     },
     {
       type: "wildcard",
       headline:
-        "A severe reliability event in a high-growth region could reset the politics of both load growth and transmission spending overnight.",
-      whatChanged:
-        "Reserve margins tightened in several regions where load growth is concentrated. A significant loss-of-load event attributed publicly to data-centre demand would reshape siting politics far faster than any planning process.",
+        "A severe reliability event in a high-growth region would reset the politics of load growth overnight.",
       evidence:
-        "• Tightening reserve margins flagged in reliability assessments for high-growth regions\n• Load growth concentrated in a limited number of territories\n• Public attribution of grid stress to large new loads already appearing in local coverage",
+        "• Reserve margins tightening where load growth is most concentrated\n• Grid stress already attributed publicly to large new loads",
       whyItMatters:
         "The response to a visible failure is rarely proportionate, and it would arrive as moratoria rather than as investment.",
       confidence: "low",
@@ -381,11 +347,9 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "momentum",
       headline:
-        "AI-driven capital expenditure has become a primary driver of U.S. industrial and electrical investment.",
-      whatChanged:
-        "Compute build-out moved from a technology-sector story to a macroeconomic one, pulling through electrical equipment, construction, gas turbines and skilled trades at a scale that now registers in national investment statistics.",
+        "AI capital expenditure has become a primary driver of U.S. industrial and electrical investment.",
       evidence:
-        "• Data-centre construction a leading category of non-residential structures investment\n• Turbine, transformer and switchgear order books lengthened substantially by compute demand\n• Regional construction employment gains concentrated around announced campuses",
+        "• Data-centre construction a leading category of non-residential structures investment\n• Turbine, transformer and switchgear order books lengthened by compute demand",
       whyItMatters:
         "For the first time in decades a private demand signal, not a public programme, is pulling the domestic electrical industrial base forward.",
       confidence: "high",
@@ -394,11 +358,9 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "fragility",
       headline:
-        "Energy investment is being underwritten against compute demand forecasts that have proven repeatedly unstable.",
-      whatChanged:
-        "Load forecasts were revised sharply and in both directions as efficiency gains, model architecture changes and siting decisions landed. Utilities are nonetheless planning multi-decade assets against the current version of those forecasts.",
+        "Multi-decade energy assets are being underwritten against compute forecasts that have proven repeatedly unstable.",
       evidence:
-        "• Large revisions to utility load forecasts within short intervals\n• Speculative interconnection requests inflating apparent demand through duplicate applications\n• Efficiency improvements repeatedly outrunning projected energy intensity",
+        "• Large utility load forecast revisions within short intervals, in both directions\n• Duplicate speculative interconnection requests inflating apparent demand",
       whyItMatters:
         "Over-building against a soft forecast puts the cost on ratepayers; under-building puts it on reliability. Neither error is recoverable quickly.",
       confidence: "medium",
@@ -408,10 +370,8 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       type: "bottleneck",
       headline:
         "Electrical infrastructure lead times, not chips, now set the pace of U.S. compute deployment.",
-      whatChanged:
-        "Chip supply eased relative to demand while transformers, switchgear, turbines and substation construction became the binding constraint. Operators are buying and warehousing electrical equipment years ahead of need.",
       evidence:
-        "• Multi-year lead times for large power transformers and high-voltage switchgear\n• Gas turbine order books effectively sold out well into the next decade\n• Operators pre-purchasing and stockpiling long-lead electrical equipment",
+        "• Multi-year lead times for large transformers and high-voltage switchgear\n• Gas turbine order books effectively sold out into the next decade",
       whyItMatters:
         "The AI race is currently an electrical-equipment manufacturing race, and that is a competition the United States can actually choose to win.",
       confidence: "high",
@@ -420,11 +380,9 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     {
       type: "opportunity",
       headline:
-        "AI applied to grid operations, permitting and industrial process control is far more valuable near-term than AI-driven materials discovery.",
-      whatChanged:
-        "Practical deployments in outage prediction, interconnection study automation, permit review and process optimisation delivered measurable results, while the headline promise of AI-accelerated materials discovery remains largely prospective.",
+        "AI applied to grid operations, permitting and process control pays off sooner than AI-driven materials discovery.",
       evidence:
-        "• Documented cycle-time reductions in utility engineering and study workflows\n• Automated review tools cutting permitting and environmental review timelines\n• Process-control deployments delivering measured energy-intensity improvements",
+        "• Documented cycle-time reductions in utility engineering and study workflows\n• Automated review tools cutting permitting and environmental review timelines",
       whyItMatters:
         "The near-term energy value of AI is in clearing the administrative and operational bottlenecks that already constrain the build-out.",
       confidence: "medium",
@@ -434,10 +392,8 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
       type: "wildcard",
       headline:
         "A step change in compute efficiency could decouple AI capability growth from electricity demand growth.",
-      whatChanged:
-        "Efficiency gains from architecture, sparsity, specialised silicon and improved utilisation have repeatedly outpaced projections. A sustained step change would break the assumed link between AI capability and load growth that underpins current energy planning.",
       evidence:
-        "• Energy per unit of useful output falling faster than most published projections\n• Specialised inference silicon delivering large efficiency gains over general-purpose hardware\n• Utilisation improvements reducing energy per deployed unit of capacity",
+        "• Energy per unit of useful output falling faster than published projections\n• Specialised inference silicon delivering large gains over general-purpose hardware",
       whyItMatters:
         "It would be excellent news for emissions and affordability, and severely disruptive for everyone who committed capital to serving the forecast.",
       confidence: "low",
@@ -447,7 +403,6 @@ const DEMO_FINDINGS: Record<string, SeedFinding[]> = {
     },
   ],
 };
-
 // --- Builders --------------------------------------------------------------
 
 function makeBreakouts(submitted: boolean): Breakout[] {
@@ -470,7 +425,6 @@ function makeFindings(submitted: boolean): Finding[] {
         breakoutId: breakout.id,
         type: seed.type,
         headline: seed.headline,
-        whatChanged: seed.whatChanged,
         evidence: seed.evidence,
         whyItMatters: seed.whyItMatters,
         confidence: seed.confidence,
@@ -563,7 +517,6 @@ export function createBlankFindings(breakoutId: string): Finding[] {
     breakoutId,
     type,
     headline: "",
-    whatChanged: "",
     evidence: "",
     whyItMatters: "",
     confidence: "medium" as const,

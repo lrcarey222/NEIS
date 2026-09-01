@@ -19,8 +19,11 @@ import { canEditBreakout, useRole } from "@/lib/localAuth";
 import { useEvent } from "@/lib/useEvent";
 import {
   CONFIDENCE_LEVELS,
+  FIELD_LIMITS,
   FINDING_TYPES,
   FINDING_TYPE_META,
+  evidenceLines,
+  wordCount,
   type Confidence,
   type Finding,
   type FindingType,
@@ -113,7 +116,16 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
   }
 
   const submitted = breakout.submissionStatus === "submitted";
-  const complete = findings.filter((f) => f.headline.trim().length > 0).length;
+  // Headline, why-it-matters and confidence are what a finding needs to be
+  // judgeable; evidence makes it stronger but its absence never blocks a room.
+  const readiness = {
+    total: findings.length,
+    headlines: findings.filter((f) => f.headline.trim().length > 0).length,
+    complete: findings.filter(
+      (f) => f.headline.trim().length > 0 && f.whyItMatters.trim().length > 0,
+    ).length,
+    withEvidence: findings.filter((f) => evidenceLines(f.evidence).length > 0).length,
+  };
 
   async function setStatus(next: "drafting" | "submitted") {
     const result = await patchBreakout(state!, slug, { submissionStatus: next });
@@ -158,12 +170,18 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
             how much your group thinks they matter. Everything saves automatically as you
             type; nothing reaches the main board until you submit.
           </p>
+          <p className="text-paper-mute mt-3 text-sm leading-relaxed">
+            Keep each headline to about{" "}
+            <strong className="text-paper">twenty words</strong> and make it a conclusion,
+            not a topic — it has to read from the back of the room. The counters under each
+            field are guidance, never a block.
+          </p>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <StatusPill status={breakout.submissionStatus} />
           <span className="text-paper-faint tabular font-mono text-xs tracking-[0.1em] uppercase">
-            {complete} / {findings.length || 5} drafted
+            {readiness.headlines} / {readiness.total || 5} drafted
           </span>
           <button
             type="button"
@@ -254,9 +272,9 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
                 Mark as drafting
               </button>
               <SubmitButton
-                disabled={complete === 0}
+                disabled={readiness.headlines === 0}
                 onConfirm={() => void setStatus("submitted")}
-                incomplete={complete < findings.length}
+                readiness={readiness}
               />
             </>
           )}
@@ -270,13 +288,28 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
 
 // --- Submit ----------------------------------------------------------------
 
+interface Readiness {
+  total: number;
+  headlines: number;
+  complete: number;
+  withEvidence: number;
+}
+
+/**
+ * Submitting is confirmed with a count, not gated on one.
+ *
+ * "5 findings — 5 headlines, 4 with evidence" tells a facilitator exactly what
+ * they are about to publish and lets them decide whether the missing piece is
+ * worth the last two minutes. Blocking them instead would strand a room's whole
+ * session behind a field nobody had time to fill in.
+ */
 function SubmitButton({
   disabled,
-  incomplete,
+  readiness,
   onConfirm,
 }: {
   disabled: boolean;
-  incomplete: boolean;
+  readiness: Readiness;
   onConfirm: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -297,7 +330,10 @@ function SubmitButton({
   return (
     <span className="flex items-center gap-2">
       <span className="text-paper-mute text-xs">
-        {incomplete ? "Some findings are blank. Submit anyway?" : "Publish to the board?"}
+        {readiness.total} finding{readiness.total === 1 ? "" : "s"} —{" "}
+        {readiness.headlines} headline{readiness.headlines === 1 ? "" : "s"},{" "}
+        {readiness.complete} with why-it-matters, {readiness.withEvidence} with evidence.
+        Publish?
       </span>
       <button type="button" className="btn btn-ghost" onClick={() => setConfirming(false)}>
         Cancel
@@ -373,7 +409,7 @@ function FindingEditor({
     [finding.id, onSave],
   );
 
-  function field(key: "headline" | "whatChanged" | "evidence" | "whyItMatters" | "dissent") {
+  function field(key: "headline" | "evidence" | "whyItMatters" | "dissent") {
     return {
       value: draft[key],
       onChange: (
@@ -447,60 +483,53 @@ function FindingEditor({
       {expanded ? (
         <div className="border-ink-500 space-y-4 border-t p-4">
           <div>
-            <label className="label" htmlFor={`headline-${finding.id}`}>
-              Headline — a short declarative sentence
-            </label>
+            <FieldLabel htmlFor={`headline-${finding.id}`} required>
+              Headline — one declarative sentence, not a topic
+            </FieldLabel>
             <input
               id={`headline-${finding.id}`}
               className="field text-base"
               placeholder={meta.blurb}
-              maxLength={200}
+              maxLength={FIELD_LIMITS.headline.maxLength}
               {...field("headline")}
             />
+            <WordCounter text={draft.headline} limits={FIELD_LIMITS.headline} />
           </div>
 
           <div>
-            <label className="label" htmlFor={`changed-${finding.id}`}>
-              What changed? — 1–3 sentences
-            </label>
-            <textarea
-              id={`changed-${finding.id}`}
-              className="field"
-              rows={3}
-              {...field("whatChanged")}
-            />
-          </div>
-
-          <div>
-            <label className="label" htmlFor={`evidence-${finding.id}`}>
-              Evidence — one point per line
-            </label>
+            <FieldLabel htmlFor={`evidence-${finding.id}`} hint="encouraged">
+              Evidence — two bullets, one per line
+            </FieldLabel>
             <textarea
               id={`evidence-${finding.id}`}
               className="field font-mono text-sm"
-              rows={4}
+              rows={3}
+              maxLength={FIELD_LIMITS.evidenceMaxLength}
               placeholder={"• …\n• …"}
               {...field("evidence")}
             />
+            <EvidenceCounter text={draft.evidence} />
           </div>
 
           <div>
-            <label className="label" htmlFor={`matters-${finding.id}`}>
+            <FieldLabel htmlFor={`matters-${finding.id}`} required>
               Why does it matter?
-            </label>
+            </FieldLabel>
             <textarea
               id={`matters-${finding.id}`}
               className="field"
-              rows={2}
+              rows={3}
+              maxLength={FIELD_LIMITS.whyItMatters.maxLength}
               {...field("whyItMatters")}
             />
+            <WordCounter text={draft.whyItMatters} limits={FIELD_LIMITS.whyItMatters} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label" htmlFor={`confidence-${finding.id}`}>
+              <FieldLabel htmlFor={`confidence-${finding.id}`} required>
                 Confidence
-              </label>
+              </FieldLabel>
               <select
                 id={`confidence-${finding.id}`}
                 className="field"
@@ -521,9 +550,7 @@ function FindingEditor({
             </div>
 
             <div>
-              <label className="label" htmlFor={`type-${finding.id}`}>
-                Finding type
-              </label>
+              <FieldLabel htmlFor={`type-${finding.id}`}>Finding type</FieldLabel>
               <select
                 id={`type-${finding.id}`}
                 className="field"
@@ -544,14 +571,18 @@ function FindingEditor({
             </div>
           </div>
 
-          <details className="group">
-            <summary className="text-paper-mute hover:text-paper cursor-pointer text-xs select-none">
-              Add a dissenting view (optional)
+          {/* Collapsed by default and left collapsed unless there is something
+              in it. An empty box on screen makes forty people feel they owe
+              you a disagreement; a link is found by the rooms that have one. */}
+          <details className="group" open={Boolean(draft.dissent)}>
+            <summary className="text-paper-mute hover:text-signal cursor-pointer text-xs select-none">
+              + Add a dissenting view
             </summary>
             <div className="mt-3">
               <textarea
                 className="field"
                 rows={2}
+                maxLength={FIELD_LIMITS.dissentMaxLength}
                 placeholder="A minority of the group argued that…"
                 {...field("dissent")}
               />
@@ -560,5 +591,108 @@ function FindingEditor({
         </div>
       ) : null}
     </section>
+  );
+}
+
+// --- Length counters -------------------------------------------------------
+
+/**
+ * Field label carrying whether the field is required.
+ *
+ * Marked on the card rather than enforced on submit: a room that has thirteen
+ * minutes and one evidence line should still be able to publish, and being
+ * refused at the last moment in front of a moderator is the worst possible
+ * time to find out.
+ */
+function FieldLabel({
+  htmlFor,
+  required,
+  hint,
+  children,
+}: {
+  htmlFor: string;
+  required?: boolean;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="label flex items-baseline gap-2" htmlFor={htmlFor}>
+      <span>{children}</span>
+      {required ? (
+        <span className="text-signal font-mono text-[0.5625rem] tracking-[0.12em]">
+          REQUIRED
+        </span>
+      ) : hint ? (
+        <span className="text-paper-faint font-mono text-[0.5625rem] tracking-[0.12em] uppercase">
+          {hint}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+type Limits = { target: number; amber: number; red: number };
+
+/** Amber at the target, red well past it. Never blocking. */
+function toneFor(words: number, limits: Limits): string {
+  if (words >= limits.red) return "text-fragility";
+  if (words >= limits.amber) return "text-signal";
+  return "text-paper-faint";
+}
+
+function WordCounter({ text, limits }: { text: string; limits: Limits }) {
+  const words = wordCount(text);
+  const over = words >= limits.amber;
+
+  return (
+    <p
+      className={cx(
+        "tabular mt-1 text-right font-mono text-[0.625rem] tracking-[0.08em]",
+        toneFor(words, limits),
+      )}
+      aria-live="off"
+    >
+      {words} / {limits.target} words
+      {over ? (
+        <span className="ml-1.5 tracking-normal normal-case">
+          {words >= limits.red ? "— too long to project" : "— trim if you can"}
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * Evidence is counted per bullet, because the limit is a line of projected
+ * text rather than a total. A third bullet is allowed and kept — it just will
+ * not fit on the board, and the room should know that before the presentation.
+ */
+function EvidenceCounter({ text }: { text: string }) {
+  const lines = evidenceLines(text);
+  if (lines.length === 0) {
+    return (
+      <p className="text-paper-faint mt-1 text-right font-mono text-[0.625rem] tracking-[0.08em]">
+        0 / {FIELD_LIMITS.evidenceBullets} bullets
+      </p>
+    );
+  }
+
+  const counts = lines.map((line) => wordCount(line));
+  const worst = Math.max(...counts);
+  const extra = lines.length - FIELD_LIMITS.evidenceBullets;
+
+  return (
+    <p className="mt-1 flex flex-wrap items-baseline justify-end gap-x-2 text-right font-mono text-[0.625rem] tracking-[0.08em]">
+      <span className={cx("tabular", toneFor(worst, FIELD_LIMITS.evidenceBullet))}>
+        {lines.length} bullet{lines.length === 1 ? "" : "s"}, longest {worst} /{" "}
+        {FIELD_LIMITS.evidenceBullet.target} words
+      </span>
+      {extra > 0 ? (
+        <span className="text-signal tracking-normal normal-case">
+          — bullet{extra === 1 ? "" : "s"} {FIELD_LIMITS.evidenceBullets + 1}
+          {extra > 1 ? `–${lines.length}` : ""} won&apos;t project
+        </span>
+      ) : null}
+    </p>
   );
 }

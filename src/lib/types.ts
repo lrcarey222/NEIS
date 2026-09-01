@@ -122,7 +122,16 @@ export interface Finding {
   breakoutId: string;
   type: FindingType;
   headline: string;
-  whatChanged: string;
+  /**
+   * Removed from the form in schema 3. A room has thirteen minutes for five
+   * findings, and a headline that is a real conclusion already contains what
+   * changed — asking for both made every room write the finding twice.
+   *
+   * Kept on the type, and read on load, only so events written before the
+   * change survive: lib/serialize.ts appends any text found here to
+   * `whyItMatters` rather than dropping it.
+   */
+  whatChanged?: string;
   evidence: string;
   whyItMatters: string;
   confidence: Confidence;
@@ -140,7 +149,7 @@ export interface Panelist {
   name: string;
   affiliation: string;
   /**
-   * The lens this panelist drafts through — "Investor", "Security Hawk". Free
+   * The lens this panelist drafts through — "Governor", "Utility CEO". Free
    * text, because the panel is whoever turns up.
    */
   role: string;
@@ -208,8 +217,47 @@ export interface EventState {
  * picks), gave panelists a role and an action prompt, and added the audience
  * play-along. lib/serialize.ts reads a version 1 event without complaint: its
  * objectives are ignored and its `objectiveId` on a transaction is dropped.
+ *
+ * 3 dropped the finding's `whatChanged` field and added the run of show. A
+ * version 2 event still loads: its `whatChanged` text is appended to
+ * `whyItMatters` rather than discarded, and an event with no `runOfShow` gets
+ * an empty one, which every screen renders as "no schedule loaded".
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+
+/**
+ * Soft length targets for the finding form.
+ *
+ * These are legibility limits before they are time limits: a forty-word
+ * headline does not read from the back of a conference room at 16:9, however
+ * long the room had to write it. The counters warn and then shout, but never
+ * block — nothing stops a facilitator mid-sentence. `maxLength` is roughly
+ * double the target and exists only so a pasted paragraph cannot destroy the
+ * projected layout.
+ */
+export const FIELD_LIMITS = {
+  headline: { target: 20, amber: 20, red: 28, maxLength: 280 },
+  /** Per bullet, not for the whole box. */
+  evidenceBullet: { target: 15, amber: 15, red: 22 },
+  /** Bullets beyond this are kept but flagged as "won't project". */
+  evidenceBullets: 2,
+  evidenceMaxLength: 480,
+  whyItMatters: { target: 40, amber: 40, red: 55, maxLength: 560 },
+  dissentMaxLength: 400,
+} as const;
+
+/** Words, the way a reader counts them. */
+export function wordCount(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
+/** Evidence lines, bullet markers and blank lines stripped. */
+export function evidenceLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^[•\-*]\s*/, "").trim())
+    .filter(Boolean);
+}
 
 /**
  * Who the current browser is acting as. Declared here rather than in lib/auth
@@ -287,28 +335,29 @@ export const CONFIDENCE_META: Record<
  */
 export const DEFAULT_ROLES: { name: string; prompt: string }[] = [
   {
-    name: "Investor",
-    prompt: "What is the strongest portfolio of investable opportunities on this board?",
-    },
-  {
-    name: "Philanthropist",
+    name: "National Security Advisor",
     prompt:
-      "Where would catalytic, risk-tolerant capital move the needle furthest — and nobody else will fund it?",
+      "Which findings most reduce exposure to coercion, disruption, or untrusted supply?",
   },
   {
-    name: "Climate Scientist",
+    name: "Treasury Secretary",
     prompt:
-      "Which of these matter most for the pace of emissions reduction over the next decade?",
+      "Which findings most improve productivity, market share, and the ability to compete without indefinite protection?",
   },
   {
-    name: "Economist",
+    name: "Governor",
     prompt:
-      "Which of these tell us most about growth, prices, and where productivity actually comes from?",
+      "Which findings most determine whether this agenda delivers visible benefits and survives a change of administration?",
   },
   {
-    name: "Security Hawk",
+    name: "Utility CEO",
     prompt:
-      "Which of these most affect national security, critical supply chains, and strategic industrial capacity?",
+      "Which findings most affect reliable, abundant, predictably priced power for households and strategic industry?",
+  },
+  {
+    name: "National Lab Director",
+    prompt:
+      "Which findings most affect durable emissions reductions, deployment speed, learning, and technology diffusion?",
   },
 ];
 

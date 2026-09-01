@@ -265,7 +265,6 @@ export type FindingPatch = Partial<
     Finding,
     | "type"
     | "headline"
-    | "whatChanged"
     | "evidence"
     | "whyItMatters"
     | "confidence"
@@ -301,7 +300,6 @@ export async function createFinding(
     breakoutId,
     type: patch.type ?? "momentum",
     headline: patch.headline ?? "",
-    whatChanged: patch.whatChanged ?? "",
     evidence: patch.evidence ?? "",
     whyItMatters: patch.whyItMatters ?? "",
     confidence: patch.confidence ?? "medium",

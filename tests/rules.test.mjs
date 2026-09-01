@@ -15,6 +15,7 @@ import {
 } from "../src/lib/derive.ts";
 import { createEvent } from "../src/lib/seed.ts";
 import { fromSnapshot, toSnapshot } from "../src/lib/serialize.ts";
+import { FIELD_LIMITS, evidenceLines, wordCount } from "../src/lib/types.ts";
 
 function demo() {
   return createEvent({ demo: true, startingBudget: 100 });
@@ -364,21 +365,28 @@ test("the panel seeds one seat per default role, each with its question", () => 
 
   assert.deepEqual(
     roles.map((r) => r.name),
-    ["Investor", "Philanthropist", "Climate Scientist", "Economist", "Security Hawk"],
+    [
+      "National Security Advisor",
+      "Treasury Secretary",
+      "Governor",
+      "Utility CEO",
+      "National Lab Director",
+    ],
   );
   assert.ok(roles.every((r) => r.prompt.length > 0), "every seeded role has a prompt");
 });
 
 test("two panelists sharing a role collapse to one entry for the audience", () => {
   const state = createEvent({});
-  state.panelists[1].role = "Investor";
+  const shared = state.panelists[0].role;
+  state.panelists[1].role = shared;
   state.panelists[1].rolePrompt = "";
 
   const roles = panelRoles(state);
-  assert.equal(roles.filter((r) => r.name === "Investor").length, 1);
-  const investor = roles.find((r) => r.name === "Investor");
-  assert.equal(investor.panelists.length, 2);
-  assert.ok(investor.prompt.length > 0, "the first non-empty prompt wins");
+  assert.equal(roles.filter((r) => r.name === shared).length, 1);
+  const merged = roles.find((r) => r.name === shared);
+  assert.equal(merged.panelists.length, 2);
+  assert.ok(merged.prompt.length > 0, "the first non-empty prompt wins");
 });
 
 test("a panelist with no role is left out of the audience's choices", () => {
@@ -491,7 +499,92 @@ test("an audience summary with nobody playing is empty rather than broken", () =
   assert.ok(summary.stats.every((s) => s.average === 0));
 });
 
+// --- Finding shape ----------------------------------------------------------
+
+test("every demo finding sits inside the length targets it is modelling", () => {
+  for (const finding of demo().findings) {
+    const label = `${finding.id}`;
+
+    assert.ok(
+      wordCount(finding.headline) < FIELD_LIMITS.headline.amber,
+      `${label}: headline is ${wordCount(finding.headline)} words, target ${FIELD_LIMITS.headline.target}`,
+    );
+    assert.ok(
+      wordCount(finding.whyItMatters) < FIELD_LIMITS.whyItMatters.amber,
+      `${label}: why-it-matters is ${wordCount(finding.whyItMatters)} words`,
+    );
+
+    const bullets = evidenceLines(finding.evidence);
+    assert.equal(bullets.length, FIELD_LIMITS.evidenceBullets, `${label}: two bullets`);
+    for (const bullet of bullets) {
+      assert.ok(
+        wordCount(bullet) < FIELD_LIMITS.evidenceBullet.amber,
+        `${label}: bullet is ${wordCount(bullet)} words — "${bullet}"`,
+      );
+    }
+
+    assert.equal(finding.whatChanged ?? "", "", `${label}: whatChanged is gone`);
+  }
+});
+
+test("word and bullet counting match how a reader would count them", () => {
+  assert.equal(wordCount(""), 0);
+  assert.equal(wordCount("   \n  "), 0);
+  assert.equal(wordCount("one  two\nthree"), 3);
+  assert.deepEqual(evidenceLines("• first\n\n- second\n   \n* third"), [
+    "first",
+    "second",
+    "third",
+  ]);
+  assert.deepEqual(evidenceLines(""), []);
+});
+
 // --- Persistence -------------------------------------------------------------
+
+test("a schema 2 finding's whatChanged is appended to whyItMatters, not lost", () => {
+  const state = demo();
+  const snapshot = toSnapshot(state);
+  const [id] = Object.keys(snapshot.findings);
+
+  snapshot.findings[id].whatChanged = "Orders shifted from speculative to contracted.";
+  snapshot.findings[id].whyItMatters = "It is resilient to policy reversal.";
+
+  const loaded = fromSnapshot(snapshot);
+  const finding = loaded.findings.find((f) => f.id === id);
+
+  assert.ok(
+    finding.whyItMatters.includes("Orders shifted from speculative to contracted."),
+    "the old text survives",
+  );
+  assert.ok(
+    finding.whyItMatters.includes("It is resilient to policy reversal."),
+    "the existing text survives too",
+  );
+
+  // Migrating on read means it runs on every load — it must not stack up.
+  const again = fromSnapshot(toSnapshot(loaded));
+  assert.equal(
+    again.findings.find((f) => f.id === id).whyItMatters,
+    finding.whyItMatters,
+    "the migration is idempotent",
+  );
+});
+
+test("whatChanged with no whyItMatters becomes the whole field", () => {
+  const state = demo();
+  const snapshot = toSnapshot(state);
+  const [id] = Object.keys(snapshot.findings);
+
+  snapshot.findings[id].whatChanged = "Only this was ever written.";
+  snapshot.findings[id].whyItMatters = "";
+
+  const loaded = fromSnapshot(snapshot);
+  assert.equal(
+    loaded.findings.find((f) => f.id === id).whyItMatters,
+    "Only this was ever written.",
+  );
+});
+
 
 test("audience entries round-trip, and junk allocations are scrubbed on read", () => {
   const state = demo();

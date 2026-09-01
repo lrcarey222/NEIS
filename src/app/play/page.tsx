@@ -674,10 +674,6 @@ function AllocationRow({
             ) : null}
           </div>
 
-          {finding.whatChanged ? (
-            <Detail label="What changed">{finding.whatChanged}</Detail>
-          ) : null}
-
           {finding.evidence ? (
             <Detail label="Evidence">
               <EvidenceBlock

@@ -269,9 +269,6 @@ export default function SummaryPage() {
                           : " · undrafted"}
                       </p>
                       <p className="mt-0.5 font-medium">{finding.headline}</p>
-                      {finding.whatChanged ? (
-                        <p className="mt-1 text-[#333]">{finding.whatChanged}</p>
-                      ) : null}
                       {finding.evidence ? (
                         <p className="mt-1 whitespace-pre-line text-[#555]">{finding.evidence}</p>
                       ) : null}

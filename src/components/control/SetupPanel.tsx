@@ -304,7 +304,7 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
                 label="Role"
                 value={panelist.role}
                 list="role-suggestions"
-                placeholder="Investor"
+                placeholder="Governor"
                 onCommit={(role) => void commitRole(panelist.id, role)}
               />
               <LiveField
