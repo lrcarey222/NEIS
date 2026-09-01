@@ -18,6 +18,17 @@
 import assert from "node:assert/strict";
 
 import { buildAudienceSummary, entrySpend, validateAward } from "../src/lib/derive.ts";
+import {
+  activeSegment,
+  advance,
+  describeDrift,
+  displayModeFor,
+  driftMs,
+  nextSegment,
+  remainingMs,
+  segmentIndex,
+  serverNow,
+} from "../src/lib/schedule.ts";
 import { createBlankFindings, createEvent } from "../src/lib/seed.ts";
 import { fromSnapshot, toSnapshot } from "../src/lib/serialize.ts";
 
@@ -83,15 +94,31 @@ try {
   {
     const seeded = createEvent({
       demo: false,
-      panelistNames: ["Ana Ruiz", "Ben Okafor", "Cai Lin", "Dara Novak"],
+      panelistNames: ["Ana Ruiz", "Ben Okafor", "Cai Lin", "Dara Novak", "Eli Mensah"],
     });
     await put("", toSnapshot(seeded));
 
     const state = await readState();
     check("event round-trips through the database", state !== null);
     check("5 breakouts", state.breakouts.length === 5, `got ${state.breakouts.length}`);
-    check("5 rounds", state.event.roundCount === 5, `got ${state.event.roundCount}`);
+    check("3 rounds by default", state.event.roundCount === 3, `got ${state.event.roundCount}`);
     check("4 panelists at 100 credits", state.panelists.every((p) => p.startingBudget === 100));
+    check(
+      "the run of show round-trips with 12 segments in order",
+      state.runOfShow.segments.length === 12 &&
+        state.runOfShow.segments[0].id === "sg-welcome" &&
+        state.runOfShow.segments.at(-1).id === "sg-lunch",
+      `got ${state.runOfShow.segments.length}`,
+    );
+    check(
+      "the breakout segment keeps its seven phases",
+      state.runOfShow.segments.find((s) => s.id === "sg-breakouts")?.phases.length === 7,
+    );
+    check(
+      "segments are stored keyed by id with the order beside them",
+      !Array.isArray((await get("/runOfShow/segments")) ?? {}) &&
+        Array.isArray(await get("/runOfShow/segmentOrder")),
+    );
     check(
       "every panelist carries a role and its question",
       state.panelists.every((p) => p.role && p.rolePrompt),
@@ -221,22 +248,23 @@ try {
     check("25 findings on the board", after.findings.filter((f) => f.submitted).length === 25);
   }
 
-  step("6. Run the draft — five rounds, four panelists, free picks");
+  step("6. Run the draft — three rounds, five panelists, free picks");
   {
     let state = await readState();
     const panelists = [...state.panelists].sort((a, b) => a.sortOrder - b.sortOrder);
     const prices = [
-      [18, 20, 14, 9, 11],
-      [22, 12, 25, 8, 7],
-      [15, 30, 10, 12, 6],
-      [11, 9, 19, 21, 13],
+      [18, 20, 14],
+      [22, 12, 25],
+      [15, 30, 10],
+      [11, 9, 19],
+      [26, 7, 13],
     ];
 
     const pool = state.findings.filter((f) => f.submitted).map((f) => f.id);
     let cursor = 0;
     let rejected = 0;
 
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < 3; round++) {
       for (const [seat, panelist] of panelists.entries()) {
         const findingId = pool[cursor++];
         state = await readState();
@@ -266,23 +294,23 @@ try {
     check("no valid award was rejected", rejected === 0, `${rejected} rejected`);
 
     const final = await readState();
-    check("ledger holds 20 transactions", final.transactions.length === 20, `got ${final.transactions.length}`);
+    check("ledger holds 15 transactions", final.transactions.length === 15, `got ${final.transactions.length}`);
 
     const expected = prices.map((row) => row.reduce((a, b) => a + b, 0));
     panelists.forEach((panelist, seat) => {
       const mine = final.transactions.filter((t) => t.panelistId === panelist.id);
       const spent = mine.reduce((sum, t) => sum + t.price, 0);
       check(
-        `${panelist.name} holds 5 findings and spent ${expected[seat]}`,
-        mine.length === 5 && spent === expected[seat],
+        `${panelist.name} holds 3 findings and spent ${expected[seat]}`,
+        mine.length === 3 && spent === expected[seat],
         `${mine.length} findings, spent ${spent}`,
       );
     });
     check(
       "no finding was drafted twice",
-      new Set(final.transactions.map((t) => t.findingId)).size === 20,
+      new Set(final.transactions.map((t) => t.findingId)).size === 15,
     );
-    check("5 findings remain undrafted", 25 - final.transactions.length === 5);
+    check("10 findings remain undrafted", 25 - final.transactions.length === 10);
   }
 
   step("7. Rules still hold against the live data");
@@ -372,8 +400,10 @@ try {
           affiliation: "",
           role: roles[i % roles.length] ?? "",
           allocations: picks,
-          // Every fifth person wanders off without submitting.
-          submitted: i % 5 !== 0,
+          // Some people wander off without submitting. The period has to be
+          // coprime with the number of roles, or the drop-outs land entirely
+          // on one role and it vanishes from the per-role breakdown.
+          submitted: i % 7 !== 0,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         }),
@@ -428,7 +458,100 @@ try {
     );
   }
 
-  step("10. Reset the auction without losing findings");
+  step("10. Advance the run of show, exactly as the operator bar does");
+  {
+    // The operator's laptop stamps server time; every other screen reads that
+    // stamp through its own offset. Simulate three devices with three wrong
+    // clocks to prove they all compute the same remaining time.
+    const devices = [
+      { name: "projector", skew: 11_000 },
+      { name: "operator laptop", skew: -240_000 },
+      { name: "a phone on /agenda", skew: 0 },
+    ];
+
+    let state = await readState();
+    let schedule = state.runOfShow;
+    const opened = Date.now();
+
+    for (const [step, expected] of [
+      ["sg-welcome", "card"],
+      ["sg-standing", "card"],
+      ["sg-move", "instructions"],
+    ].entries()) {
+      const [expectedId, expectedMode] = expected;
+
+      // Advancing is a click, so it is one multi-path write. Nothing between
+      // here and the next click writes anything at all.
+      const result = advance(schedule, opened + step * 60_000);
+      check(`advance ${step + 1} lands on ${expectedId}`, result?.segment.id === expectedId);
+
+      await patch("/runOfShow", {
+        activeSegmentId: result.schedule.activeSegmentId,
+        segmentStartedAt: result.schedule.segmentStartedAt,
+        pausedAt: result.schedule.pausedAt,
+        pausedMs: result.schedule.pausedMs,
+        dayStartedAt: result.schedule.dayStartedAt,
+        presenterIndex: result.schedule.presenterIndex,
+        presenterStartedAt: result.schedule.presenterStartedAt,
+      });
+      await patch("/event", { displayMode: result.displayMode });
+
+      state = await readState();
+      schedule = state.runOfShow;
+
+      check(
+        `the projector switches to ${expectedMode}`,
+        state.event.displayMode === expectedMode,
+        `got ${state.event.displayMode}`,
+      );
+      check(
+        `every screen agrees the live segment is ${expectedId}`,
+        activeSegment(schedule)?.id === expectedId &&
+          segmentIndex(schedule) === step &&
+          displayModeFor(activeSegment(schedule)) === state.event.displayMode,
+      );
+      check(
+        "the day start is stamped once and never restamped",
+        schedule.dayStartedAt === opened,
+        `got ${schedule.dayStartedAt}`,
+      );
+
+      // The reason the whole model works: every screen subtracts locally from
+      // one stored stamp, so they cannot disagree. Read 90 seconds in, so the
+      // devices are comparing a mid-countdown value rather than the planned
+      // length they would all trivially agree on at zero.
+      const trueNow = opened + step * 60_000 + 90_000;
+      const readings = devices.map((device) =>
+        // Local clock is `trueNow + skew`; the offset that corrects it is `-skew`.
+        remainingMs(schedule, serverNow(trueNow + device.skew, -device.skew)),
+      );
+      check(
+        `all three devices read the same remaining time (${describeDrift(driftMs(schedule, trueNow))})`,
+        new Set(readings).size === 1 && readings[0] < result.segment.plannedMinutes * 60_000,
+        readings.join(" / "),
+      );
+    }
+
+    check("the next segment is the breakouts", nextSegment(schedule)?.id === "sg-breakouts");
+
+    // The invariant that makes this safe to leave running all day: no screen
+    // writes on a tick, so the node is byte-identical a moment later.
+    const beforeIdle = JSON.stringify(await get("/runOfShow"));
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    check(
+      "no write happened while the clock ran",
+      JSON.stringify(await get("/runOfShow")) === beforeIdle,
+    );
+
+    // Jumping out of order, and running off the end of the agenda.
+    const jumped = advance(schedule, opened, "sg-auction");
+    check("the operator can jump straight to the auction", jumped?.displayMode === "auction");
+
+    const atEnd = { ...schedule, activeSegmentId: "sg-lunch" };
+    check("advancing past the last segment is a no-op", advance(atEnd, opened) === null);
+  }
+
+  step("11. Reset the auction without losing findings");
   {
     await del("/transactions");
     await patch("/event", { currentRoundIndex: -1, displayMode: "board", status: "breakouts" });
