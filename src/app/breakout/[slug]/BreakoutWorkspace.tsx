@@ -19,6 +19,7 @@ import { buildFindingView, findingsForBreakout, type FindingView } from "@/lib/d
 import { canEditBreakout, useRole } from "@/lib/localAuth";
 import { useEvent } from "@/lib/useEvent";
 import {
+  AUCTION_RANK_LIMIT,
   CONFIDENCE_LEVELS,
   FIELD_LIMITS,
   FINDING_TYPES,
@@ -168,8 +169,13 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
           <p className="text-paper-dim text-sm leading-relaxed">
             Record <strong className="text-paper">five Strategic Findings</strong> covering
             developments over the last 18 months — one of each type below. Rank them 1–5 by
-            how much your group thinks they matter. Everything saves automatically as you
-            type; nothing reaches the main board until you submit.
+            how much your group thinks they matter:{" "}
+            <strong className="text-paper">
+              your top {AUCTION_RANK_LIMIT} go to the auction
+            </strong>{" "}
+            and the panel bids on those. All five stay on the board and in the record.
+            Everything saves automatically as you type; nothing reaches the main board until
+            you submit.
           </p>
           <p className="text-paper-mute mt-3 text-sm leading-relaxed">
             Keep each headline to about{" "}
@@ -236,21 +242,32 @@ export function BreakoutWorkspace({ slug }: { slug: string }) {
             </Notice>
           ) : (
             findings.map((finding, index) => (
-              <FindingEditor
-                key={finding.id}
-                finding={finding}
-                index={index}
-                total={findings.length}
-                disabled={submitted}
-                onSave={save}
-                onMove={async (direction) => {
-                  const ordered = [...findings];
-                  const target = index + direction;
-                  if (target < 0 || target >= ordered.length) return;
-                  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-                  await reorderFindings(ordered.map((f) => f.id));
-                }}
-              />
+              <div key={finding.id} className="space-y-4">
+                {/* The auction line, drawn where the room can still move it.
+                    A ranking with no visible consequence gets done in the last
+                    minute; one with a line through it gets argued about. */}
+                {index === AUCTION_RANK_LIMIT ? (
+                  <p className="text-paper-faint flex items-center gap-3 pt-2 font-mono text-[0.625rem] tracking-[0.14em] whitespace-nowrap uppercase">
+                    <span className="bg-ink-500 h-px flex-1" />
+                    Below the auction line
+                    <span className="bg-ink-500 h-px flex-1" />
+                  </p>
+                ) : null}
+                <FindingEditor
+                  finding={finding}
+                  index={index}
+                  total={findings.length}
+                  disabled={submitted}
+                  onSave={save}
+                  onMove={async (direction) => {
+                    const ordered = [...findings];
+                    const target = index + direction;
+                    if (target < 0 || target >= ordered.length) return;
+                    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+                    await reorderFindings(ordered.map((f) => f.id));
+                  }}
+                />
+              </div>
             ))
           )}
         </div>

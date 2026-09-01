@@ -12,6 +12,7 @@
 // number on the projector and the number in the CSV cannot drift apart.
 // ---------------------------------------------------------------------------
 
+import { AUCTION_RANK_LIMIT } from "./types";
 import type {
   AudienceEntry,
   Breakout,
@@ -53,7 +54,9 @@ export interface FindingView {
   transaction: Transaction | null;
   panelist: Panelist | null;
   isDrafted: boolean;
-  /** Submitted by its breakout and not yet sold. */
+  /** In the auction pool: submitted and ranked in its room's top three. */
+  inAuction: boolean;
+  /** In the pool and not yet sold. */
   isAvailable: boolean;
 }
 
@@ -79,6 +82,19 @@ export function findingsForBreakout(
   return state.findings
     .filter((f) => f.breakoutId === breakoutId)
     .sort((a, b) => a.breakoutRank - b.breakoutRank || a.createdAt - b.createdAt);
+}
+
+/**
+ * Is this finding for sale at all?
+ *
+ * The one place the top-three rule is expressed. Everything that shows a pool —
+ * the auction board, the operator's award form, the audience's phone, the
+ * closing comparison — asks this rather than filtering on rank itself, so the
+ * fifteen findings on the projector are provably the same fifteen the room can
+ * back and the same fifteen the operator can award.
+ */
+export function isAuctionEligible(finding: Finding): boolean {
+  return finding.submitted && finding.breakoutRank <= AUCTION_RANK_LIMIT;
 }
 
 /** The live transaction for a finding, or null if it is still on the board. */
@@ -139,13 +155,16 @@ export function buildFindingView(
     ? (state.panelists.find((p) => p.id === transaction.panelistId) ?? null)
     : null;
 
+  const inAuction = isAuctionEligible(finding);
+
   return {
     finding,
     breakout,
     transaction,
     panelist,
     isDrafted: transaction !== null,
-    isAvailable: finding.submitted && transaction === null,
+    inAuction,
+    isAvailable: inAuction && transaction === null,
   };
 }
 
@@ -153,9 +172,26 @@ export function allFindingViews(state: EventState): FindingView[] {
   return state.findings.map((f) => buildFindingView(state, f));
 }
 
-/** Findings that can still be bought: submitted, not yet sold. */
+/**
+ * The whole auction pool — each room's top three, sold or not.
+ *
+ * Ordered by rank and then by room, so the pool reads as three tiers rather
+ * than as five blocks of three: the number ones sit together at the top of the
+ * board, which is the order the panel is arguing about.
+ */
+export function auctionFindings(state: EventState): FindingView[] {
+  return allFindingViews(state)
+    .filter((v) => v.inAuction)
+    .sort(
+      (a, b) =>
+        a.finding.breakoutRank - b.finding.breakoutRank ||
+        (a.breakout?.sortOrder ?? 0) - (b.breakout?.sortOrder ?? 0),
+    );
+}
+
+/** Findings that can still be bought: in the pool, not yet sold. */
 export function availableFindings(state: EventState): FindingView[] {
-  return allFindingViews(state).filter((v) => v.isAvailable);
+  return auctionFindings(state).filter((v) => v.isAvailable);
 }
 
 export function buildPanelistView(
@@ -315,6 +351,17 @@ export function validateAward(
       code: "unsubmitted",
       message: `“${finding.headline}” has not been submitted by its breakout yet.`,
     });
+  } else if (finding.breakoutRank > AUCTION_RANK_LIMIT) {
+    // A warning rather than an error: the moderator can take a bid on a
+    // finding the room raised from the floor, and refusing to record what
+    // actually happened in front of everyone would be worse than a pool the
+    // board did not predict.
+    warnings.push({
+      code: "outside_pool",
+      message:
+        `Ranked #${finding.breakoutRank} by its breakout — outside the top ` +
+        `${AUCTION_RANK_LIMIT} on the board, so it is not in the auction pool.`,
+    });
   }
 
   // A finding cannot be sold twice.
@@ -421,7 +468,7 @@ export interface AudienceSummary {
   /** Rows submitted. The denominator for every average below. */
   submitted: number;
   creditsAllocated: number;
-  /** Every submitted finding, most-backed first. */
+  /** Every finding in the auction pool, most-backed first. */
   stats: AudienceStat[];
   /** Rated well above what the panel paid — including findings left undrafted. */
   overlooked: AudienceStat[];
@@ -470,8 +517,11 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
     };
   };
 
-  const submittedFindings = state.findings.filter((f) => f.submitted);
-  const stats = submittedFindings
+  // The pool, not everything submitted: the room allocated across the same
+  // fifteen the panel bid on, so an average over twenty-five would divide the
+  // audience's credits by findings they were never offered.
+  const poolFindings = state.findings.filter(isAuctionEligible);
+  const stats = poolFindings
     .map((finding) => statFor(finding, entries))
     .sort((a, b) => b.average - a.average || b.backers - a.backers);
 
@@ -491,7 +541,7 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
       const pool = entries.filter(
         (e) => e.role.trim().toLowerCase() === role.toLowerCase(),
       );
-      const top = submittedFindings
+      const top = poolFindings
         .map((finding) => statFor(finding, pool))
         .filter((s) => s.total > 0)
         .sort((a, b) => b.average - a.average)
@@ -550,14 +600,10 @@ export function buildSummary(state: EventState): EventSummary {
     })
     .sort((a, b) => b.count - a.count || b.spend - a.spend);
 
-  // "Notable" undrafted findings surface the breakouts' own top picks first.
-  const undrafted = submitted
-    .filter((v) => !v.isDrafted)
-    .sort(
-      (a, b) =>
-        a.finding.breakoutRank - b.finding.breakoutRank ||
-        (a.breakout?.sortOrder ?? 0) - (b.breakout?.sortOrder ?? 0),
-    );
+  // Findings that went unsold, top ranks first. Only ones that were actually
+  // for sale: a rank-four finding was never on the board, so calling it
+  // "undrafted" would read as a judgement the panel never made.
+  const undrafted = auctionFindings(state).filter((v) => !v.isDrafted);
 
   // Ranked by picks made, then by credits held in reserve. Deliberately not
   // surfaced unless the operator opts in — this is a policy exercise, not a game.

@@ -305,6 +305,21 @@ export interface AudienceEntry {
   updatedAt: number;
 }
 
+/**
+ * How many of each breakout's findings go to auction.
+ *
+ * Every room still writes five and still ranks all five — the board, the
+ * presentations and the record carry all twenty-five. But only each room's top
+ * three are for sale, which is the difference between a panel picking from
+ * twenty-five cards under time pressure and picking from fifteen. The ranking
+ * therefore has consequences: it is the rooms, not the panel, deciding which of
+ * their findings the day actually bids on.
+ *
+ * Fifteen is also exactly five panelists x three picks, so the draft can
+ * empty the board.
+ */
+export const AUCTION_RANK_LIMIT = 3;
+
 /** The entire persisted event. This object is what gets written to disk. */
 export interface EventState {
   /** Bumped whenever the on-disk shape changes, so old files can be migrated. */

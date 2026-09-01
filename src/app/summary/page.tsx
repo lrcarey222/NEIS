@@ -5,6 +5,7 @@ import {
   buildAudienceSummary,
   buildSummary,
   findingsForBreakout,
+  isAuctionEligible,
   sortedBreakouts,
   transactionForFinding,
 } from "@/lib/derive";
@@ -266,7 +267,9 @@ export default function SummaryPage() {
                         {CONFIDENCE_META[finding.confidence].short} confidence
                         {transaction
                           ? ` · sold to ${buyer?.name} for ${transaction.price}`
-                          : " · undrafted"}
+                          : isAuctionEligible(finding)
+                            ? " · undrafted"
+                            : " · not in the auction"}
                       </p>
                       <p className="mt-0.5 font-medium">{finding.headline}</p>
                       {finding.evidence ? (

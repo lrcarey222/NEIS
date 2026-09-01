@@ -17,7 +17,12 @@
 
 import assert from "node:assert/strict";
 
-import { buildAudienceSummary, entrySpend, validateAward } from "../src/lib/derive.ts";
+import {
+  auctionFindings,
+  buildAudienceSummary,
+  entrySpend,
+  validateAward,
+} from "../src/lib/derive.ts";
 import {
   activeSegment,
   advance,
@@ -260,7 +265,11 @@ try {
       [26, 7, 13],
     ];
 
-    const pool = state.findings.filter((f) => f.submitted).map((f) => f.id);
+    // The auction pool, not everything submitted: each room's top three, which
+    // for five rooms and three rounds is exactly the fifteen picks below.
+    const pool = auctionFindings(state).map((v) => v.finding.id);
+    check("the auction pool is each room's top three", pool.length === 15, `got ${pool.length}`);
+
     let cursor = 0;
     let rejected = 0;
 
@@ -310,7 +319,11 @@ try {
       "no finding was drafted twice",
       new Set(final.transactions.map((t) => t.findingId)).size === 15,
     );
-    check("10 findings remain undrafted", 25 - final.transactions.length === 10);
+    check(
+      "the board is empty and the other 10 findings were never for sale",
+      auctionFindings(final).every((v) => v.isDrafted) &&
+        final.findings.filter((f) => f.submitted).length === 25,
+    );
   }
 
   step("7. Rules still hold against the live data");
@@ -377,7 +390,9 @@ try {
     await patch("/event", { audienceOpen: true, audienceBudget: 100 });
 
     const before = await readState();
-    const board = before.findings.filter((f) => f.submitted).map((f) => f.id);
+    // The phone offers the auction pool and nothing else, so the closing
+    // comparison is panel and room over the same fifteen findings.
+    const board = auctionFindings(before).map((v) => v.finding.id);
     const roles = [...new Set(before.panelists.map((p) => p.role))].filter(Boolean);
 
     // Every handset writes its own node, all at the same moment. This is the
