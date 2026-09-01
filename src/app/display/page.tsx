@@ -6,11 +6,14 @@ import { FindingDetail } from "@/components/FindingDetail";
 import { Logo } from "@/components/Logo";
 import { StatusDot, cx } from "@/components/primitives";
 import { CountdownDisplay } from "@/components/Timer";
+import { AgendaStrip } from "@/components/display/AgendaStrip";
 import { AudienceMode } from "@/components/display/AudienceMode";
 import { AuctionMode } from "@/components/display/AuctionMode";
 import { BoardMode } from "@/components/display/BoardMode";
+import { CardMode } from "@/components/display/CardMode";
 import { InstructionsMode } from "@/components/display/InstructionsMode";
 import { PortfoliosMode } from "@/components/display/PortfoliosMode";
+import { PresentationOverlay } from "@/components/display/PresentationOverlay";
 import type { FindingView } from "@/lib/derive";
 import { useEvent } from "@/lib/useEvent";
 import type { DisplayMode } from "@/lib/types";
@@ -43,6 +46,8 @@ export default function DisplayPage() {
       if (event.key === "3") setModeOverride("portfolios");
       if (event.key === "4") setModeOverride("audience");
       if (event.key === "5") setModeOverride("instructions");
+      // 6, not a renumbering: 1–5 are in the operator's fingers already.
+      if (event.key === "6") setModeOverride("card");
       if (event.key === "f" || event.key === "F") {
         if (document.fullscreenElement) void document.exitFullscreen();
         else void document.documentElement.requestFullscreen().catch(() => {});
@@ -76,7 +81,9 @@ export default function DisplayPage() {
   const mode = modeOverride ?? state.event.displayMode;
 
   return (
-    <main className="display-root flex h-dvh flex-col overflow-hidden">
+    // `relative` so the presentation overlay can anchor to the screen rather
+    // than to the page.
+    <main className="display-root relative flex h-dvh flex-col overflow-hidden">
       <header className="flex shrink-0 items-center justify-between gap-[2em] px-[1.75em] pt-[1.25em] pb-[1em]">
         <div className="flex items-center gap-[1.25em]">
           {/* The projector header is the one place the brand has to be
@@ -108,6 +115,8 @@ export default function DisplayPage() {
 
       {mode === "instructions" ? (
         <InstructionsMode state={state} />
+      ) : mode === "card" ? (
+        <CardMode state={state} />
       ) : mode === "board" ? (
         <BoardMode state={state} onOpenFinding={openFinding} />
       ) : mode === "auction" ? (
@@ -117,6 +126,15 @@ export default function DisplayPage() {
       ) : (
         <PortfoliosMode state={state} onOpenFinding={openFinding} />
       )}
+
+      {/* Available under every mode, so "where are we, when do we break" never
+          costs a slide change. Toggled from /control, because during the
+          auction the screen is genuinely full. */}
+      <AgendaStrip state={state} />
+
+      {/* Sits over whatever is behind it — during the presentations that is
+          the presenter's own findings, which the room needs to keep seeing. */}
+      <PresentationOverlay state={state} />
 
       <FindingDetail view={detail} onClose={() => setDetail(null)} />
     </main>
@@ -136,6 +154,7 @@ function ModeIndicator({
     portfolios: "Final Portfolios",
     audience: "Audience vs Panel",
     instructions: "Instructions",
+    card: "Segment Card",
   };
 
   return (

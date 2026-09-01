@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FindingCard } from "@/components/FindingCard";
 import { QrCode } from "@/components/QrCode";
-import { cx } from "@/components/primitives";
+import { cx, panelistColumns } from "@/components/primitives";
 import {
   allPanelistViews,
   availableFindings,
@@ -79,16 +79,7 @@ export function AuctionMode({
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_20em] gap-[1.25em]">
         {/* Panelist portfolios */}
         <div
-          className={cx(
-            "grid min-h-0 gap-[0.75em]",
-            panelists.length <= 2
-              ? "grid-cols-2"
-              : panelists.length === 3
-                ? "grid-cols-3"
-                : panelists.length === 4
-                  ? "grid-cols-4"
-                  : "grid-cols-5",
-          )}
+          className={cx("grid min-h-0 gap-[0.75em]", panelistColumns(panelists.length))}
         >
           {panelists.map((view) => (
             <PanelistColumn
@@ -224,6 +215,9 @@ function PanelistColumn({
 }) {
   const { panelist, remaining, startingBudget, slots } = view;
   const share = startingBudget > 0 ? remaining / startingBudget : 0;
+  const picks = Math.max(rounds, slots.length);
+  // Three picks rather than five leaves height to spend on the headline.
+  const roomy = picks <= 3;
 
   return (
     <article className="panel flex min-h-0 flex-col overflow-hidden">
@@ -279,7 +273,7 @@ function PanelistColumn({
       {/* Picks share the card height evenly, so the team reads as a fixed
           roster rather than a list that happens to be short. */}
       <ol className="flex min-h-0 flex-1 flex-col gap-[0.35em] p-[0.6em]">
-        {Array.from({ length: Math.max(rounds, slots.length) }, (_, index) => {
+        {Array.from({ length: picks }, (_, index) => {
           const slot = slots[index];
           const finding = slot?.finding ?? null;
           const transaction = slot?.transaction ?? null;
@@ -319,10 +313,18 @@ function PanelistColumn({
                   onClick={() => onOpenFinding(buildFindingView(state, finding))}
                   className="mt-[0.3em] w-full text-left"
                 >
-                  {/* Two lines, not three: five filled picks plus the budget
-                      header have to fit the card at 16:9. The full headline is
-                      on the right-hand pool and in the detail panel. */}
-                  <p className="text-paper line-clamp-2 text-[0.75em] leading-snug font-medium">
+                  {/* How many lines the headline gets depends on how many
+                      picks share the card: at five it is two, at three there is
+                      room for the whole thing. The full text is always on the
+                      right-hand pool and in the detail panel. */}
+                  <p
+                    className={cx(
+                      "text-paper leading-snug font-medium",
+                      roomy
+                        ? "line-clamp-4 text-[0.8125em]"
+                        : "line-clamp-2 text-[0.75em]",
+                    )}
+                  >
                     {finding.headline}
                   </p>
                   <p className="mt-[0.3em] flex items-center gap-[0.4em]">

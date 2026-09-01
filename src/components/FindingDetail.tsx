@@ -133,14 +133,6 @@ export function FindingDetail({
               </Row>
             </div>
 
-            {finding.whatChanged ? (
-              <Row label="What changed">
-                <p className="text-paper-dim leading-relaxed whitespace-pre-line">
-                  {finding.whatChanged}
-                </p>
-              </Row>
-            ) : null}
-
             {finding.evidence ? (
               <Row label="Evidence">
                 <EvidenceBlock

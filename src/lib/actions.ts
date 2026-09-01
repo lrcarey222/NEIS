@@ -2,7 +2,22 @@
 
 import { roundCount, validateAward, type AwardInput } from "./derive";
 import { net } from "./net";
-import { createBlankFindings, createEvent, type CreateEventOptions } from "./seed";
+import {
+  activeSegment,
+  advance,
+  extendActive,
+  nextPresenter,
+  pause,
+  resetDay,
+  resume,
+  serverNow,
+} from "./schedule";
+import {
+  createBlankFindings,
+  createEvent,
+  createRunOfShow,
+  type CreateEventOptions,
+} from "./seed";
 import { toMap } from "./serialize";
 import type {
   AudienceEntry,
@@ -12,6 +27,8 @@ import type {
   Finding,
   FindingType,
   Panelist,
+  ScheduleState,
+  Segment,
   SubmissionStatus,
   Transaction,
 } from "./types";
@@ -258,6 +275,237 @@ export async function patchTimer(
   return guard(() => net().updatePaths(updates));
 }
 
+// --- The run of show -------------------------------------------------------
+//
+// Every write here is a click. Nothing in this section is called on an
+// interval, and nothing here writes a countdown — the clock fields are stamped
+// once when the operator advances, and every screen subtracts locally from
+// there. A room with eight screens open generates zero writes a second.
+
+/** The clock fields, as a narrow multi-path write. */
+function clockUpdates(schedule: ScheduleState): Record<string, unknown> {
+  return {
+    "runOfShow/activeSegmentId": schedule.activeSegmentId,
+    "runOfShow/segmentStartedAt": schedule.segmentStartedAt,
+    "runOfShow/pausedAt": schedule.pausedAt,
+    "runOfShow/pausedMs": schedule.pausedMs,
+    "runOfShow/dayStartedAt": schedule.dayStartedAt,
+    "runOfShow/presenterIndex": schedule.presenterIndex,
+    "runOfShow/presenterStartedAt": schedule.presenterStartedAt,
+  };
+}
+
+/**
+ * Move the day on.
+ *
+ * Stamps the new start with *server* time — `offsetMs` comes from
+ * `useServerClock`, so the number the operator's laptop writes is the one the
+ * projector counts down from even when the two clocks disagree. Also switches
+ * the display mode, because advancing a segment is what puts the right thing
+ * in front of the room.
+ *
+ * Does nothing at the end of the agenda rather than erroring: NEXT gets
+ * pressed one time too many on most run-throughs.
+ */
+export async function advanceSegment(
+  state: EventState,
+  offsetMs: number,
+  targetId?: string,
+): Promise<Result> {
+  const result = advance(state.runOfShow, serverNow(Date.now(), offsetMs), targetId);
+  if (!result) return fail("That was the last segment. Nothing to advance to.");
+
+  return guard(() =>
+    net().updatePaths({
+      ...clockUpdates(result.schedule),
+      "event/displayMode": result.displayMode,
+    }),
+  );
+}
+
+/**
+ * Hold the clock, or let it go again.
+ *
+ * The opening panel will run over and the operator needs to stop the countdown
+ * without corrupting the rest of the schedule, which is what accumulating
+ * `pausedMs` rather than moving `segmentStartedAt` buys.
+ */
+export async function toggleSchedulePause(
+  state: EventState,
+  offsetMs: number,
+): Promise<Result> {
+  const now = serverNow(Date.now(), offsetMs);
+  const schedule = state.runOfShow;
+  if (schedule.segmentStartedAt === null) return fail("The day has not started yet.");
+
+  const next = schedule.pausedAt === null ? pause(schedule, now) : resume(schedule, now);
+  return guard(() =>
+    net().updatePaths({
+      "runOfShow/pausedAt": next.pausedAt,
+      "runOfShow/pausedMs": next.pausedMs,
+    }),
+  );
+}
+
+/**
+ * Give the active segment more time.
+ *
+ * Lengthens the segment rather than rewinding its start, so the extra minutes
+ * land in the drift figure and in the recomputed wall-clock starts — which is
+ * exactly what the operator wants to see when they press it.
+ */
+export async function extendSegment(
+  state: EventState,
+  minutes: number,
+): Promise<Result> {
+  const segment = activeSegment(state.runOfShow);
+  if (!segment) return fail("No segment is running.");
+
+  const next = extendActive(state.runOfShow, minutes);
+  const updated = activeSegment(next);
+  return guard(() =>
+    net().updatePaths({
+      [`runOfShow/segments/${segment.id}/plannedMinutes`]: updated!.plannedMinutes,
+    }),
+  );
+}
+
+export type SegmentPatch = Partial<
+  Pick<
+    Segment,
+    | "title"
+    | "description"
+    | "owner"
+    | "operatorNotes"
+    | "plannedStart"
+    | "plannedMinutes"
+    | "displayMode"
+    | "presentationTimer"
+    | "presentationSeconds"
+    | "presenterCount"
+  >
+> & { speakers?: string[]; phases?: Segment["phases"] };
+
+/** Field-level, like every other edit, so two operators never clobber. */
+export async function patchSegment(
+  id: string,
+  patch: SegmentPatch,
+): Promise<Result> {
+  const updates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) updates[`runOfShow/segments/${id}/${key}`] = value;
+  }
+  if (Object.keys(updates).length === 0) return OK;
+  return guard(() => net().updatePaths(updates));
+}
+
+/**
+ * Reorder the agenda.
+ *
+ * The order list is written alongside the keyed map because RTDB does not
+ * preserve the order of an object's keys — see lib/serialize.ts.
+ */
+export async function reorderSegments(orderedIds: string[]): Promise<Result> {
+  return guard(() => net().updatePaths({ "runOfShow/segmentOrder": orderedIds }));
+}
+
+export async function createSegment(state: EventState): Promise<Result> {
+  const segment: Segment = {
+    id: newId("sg"),
+    title: "New segment",
+    description: "",
+    speakers: [],
+    owner: "",
+    operatorNotes: "",
+    plannedStart: "",
+    plannedMinutes: 10,
+    displayMode: "card",
+    phases: [],
+    presentationTimer: false,
+    presentationSeconds: 150,
+    presenterCount: 0,
+  };
+  const order = [...state.runOfShow.segments.map((s) => s.id), segment.id];
+  return guard(() =>
+    net().updatePaths({
+      [`runOfShow/segments/${segment.id}`]: segment,
+      "runOfShow/segmentOrder": order,
+    }),
+  );
+}
+
+export async function deleteSegment(state: EventState, id: string): Promise<Result> {
+  if (state.runOfShow.activeSegmentId === id) {
+    return fail("That segment is running. Advance past it before deleting it.");
+  }
+  const order = state.runOfShow.segments.map((s) => s.id).filter((s) => s !== id);
+  return guard(() =>
+    net().updatePaths({
+      [`runOfShow/segments/${id}`]: null,
+      "runOfShow/segmentOrder": order,
+    }),
+  );
+}
+
+/** Back to before the day started. Keeps the agenda, drops the clock. */
+export async function resetRunOfShow(state: EventState): Promise<Result> {
+  return guard(() => net().updatePaths(clockUpdates(resetDay(state.runOfShow))));
+}
+
+/**
+ * Load the default agenda into an event that has none.
+ *
+ * Every event created since schema 3 arrives with one; this is for the
+ * rehearsal event that was seeded before it, so an old slot can be brought up
+ * to date without wiping the findings in it.
+ */
+export async function seedRunOfShow(state: EventState): Promise<Result> {
+  if (state.runOfShow.segments.length > 0) {
+    return fail("This event already has a run of show.");
+  }
+  const fresh = createRunOfShow();
+  return guard(() =>
+    net().updatePaths({
+      "runOfShow/segments": toMap(fresh.segments),
+      "runOfShow/segmentOrder": fresh.segments.map((s) => s.id),
+      ...clockUpdates(fresh),
+    }),
+  );
+}
+
+/** Start the next breakout presenter's 2:30. */
+export async function advancePresenter(
+  state: EventState,
+  offsetMs: number,
+): Promise<Result> {
+  const segment = activeSegment(state.runOfShow);
+  const next = nextPresenter(
+    state.runOfShow,
+    segment,
+    serverNow(Date.now(), offsetMs),
+  );
+  return guard(() =>
+    net().updatePaths({
+      "runOfShow/presenterIndex": next.presenterIndex,
+      "runOfShow/presenterStartedAt": next.presenterStartedAt,
+    }),
+  );
+}
+
+export async function resetPresenterTimer(): Promise<Result> {
+  return guard(() =>
+    net().updatePaths({
+      "runOfShow/presenterIndex": -1,
+      "runOfShow/presenterStartedAt": null,
+    }),
+  );
+}
+
+/** The agenda strip along the bottom of /display. Off during the auction. */
+export async function setAgendaVisible(visible: boolean): Promise<Result> {
+  return guard(() => net().updatePaths({ "runOfShow/agendaVisible": visible }));
+}
+
 // --- Findings --------------------------------------------------------------
 
 export type FindingPatch = Partial<
@@ -265,7 +513,6 @@ export type FindingPatch = Partial<
     Finding,
     | "type"
     | "headline"
-    | "whatChanged"
     | "evidence"
     | "whyItMatters"
     | "confidence"
@@ -301,7 +548,6 @@ export async function createFinding(
     breakoutId,
     type: patch.type ?? "momentum",
     headline: patch.headline ?? "",
-    whatChanged: patch.whatChanged ?? "",
     evidence: patch.evidence ?? "",
     whyItMatters: patch.whyItMatters ?? "",
     confidence: patch.confidence ?? "medium",

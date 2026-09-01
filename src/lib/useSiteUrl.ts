@@ -25,7 +25,7 @@ export interface SiteUrl {
 }
 
 /** Page segments that are one level below the base path. */
-const APP_SEGMENTS = ["display", "control", "summary", "play"];
+const APP_SEGMENTS = ["display", "control", "summary", "play", "agenda"];
 
 export function useSiteUrl(): SiteUrl {
   const [base, setBase] = useState("");

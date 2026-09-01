@@ -10,6 +10,8 @@ import { AudiencePanel } from "@/components/control/AudiencePanel";
 import { AwardPanel } from "@/components/control/AwardPanel";
 import { BreakoutsPanel } from "@/components/control/BreakoutsPanel";
 import { LedgerPanel } from "@/components/control/LedgerPanel";
+import { RunOfShowBar } from "@/components/control/RunOfShowBar";
+import { RunOfShowPanel } from "@/components/control/RunOfShowPanel";
 import { SetupPanel } from "@/components/control/SetupPanel";
 import { patchEvent, patchTimer } from "@/lib/actions";
 import {
@@ -23,13 +25,14 @@ import { isAdmin, useRole } from "@/lib/localAuth";
 import { useEvent } from "@/lib/useEvent";
 import type { DisplayMode, EventState } from "@/lib/types";
 
-type Tab = "auction" | "ledger" | "breakouts" | "audience" | "setup";
+type Tab = "auction" | "ledger" | "breakouts" | "audience" | "runofshow" | "setup";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "auction", label: "Auction" },
   { key: "ledger", label: "Ledger" },
   { key: "breakouts", label: "Breakouts" },
   { key: "audience", label: "Audience" },
+  { key: "runofshow", label: "Run of Show" },
   { key: "setup", label: "Setup" },
 ];
 
@@ -99,6 +102,10 @@ export default function ControlPage() {
           </div>
         </div>
 
+        {/* The clock sits above the tabs on purpose: the operator is on the
+            Auction tab recording bids while it runs, and a countdown they have
+            to navigate away from is a countdown nobody looks at. */}
+        <RunOfShowBar state={state} />
         <DisplayControls state={state} />
       </header>
 
@@ -180,6 +187,9 @@ export default function ControlPage() {
               Audience CSV
             </button>
           ) : null}
+          <a className="btn btn-ghost" href="../agenda/" target="_blank" rel="noreferrer">
+            Agenda ↗
+          </a>
           <a className="btn btn-ghost" href="../summary/" target="_blank" rel="noreferrer">
             Printable summary ↗
           </a>
@@ -190,6 +200,7 @@ export default function ControlPage() {
       {tab === "ledger" ? <LedgerPanel state={state} /> : null}
       {tab === "breakouts" ? <BreakoutsPanel state={state} /> : null}
       {tab === "audience" ? <AudiencePanel state={state} /> : null}
+      {tab === "runofshow" ? <RunOfShowPanel state={state} /> : null}
       {tab === "setup" ? <SetupPanel state={state} /> : null}
     </main>
   );
@@ -270,8 +281,14 @@ function DisplayControls({ state }: { state: EventState }) {
   const [minutes, setMinutes] = useState("20");
   const [label, setLabel] = useState(state.timer.label);
 
-  // Chronological order — Instructions is the screen the room sees first.
+  // Chronological order — the segment card is what fills the opening panel,
+  // and Instructions is the screen the room sees as it moves to the breakouts.
+  //
+  // These stay a manual override: pressing one changes what is projected
+  // *without* advancing the segment, so the operator can put the agenda up
+  // mid-auction and put it back without disturbing the clock.
   const modes: { key: DisplayMode; label: string }[] = [
+    { key: "card", label: "Segment card" },
     { key: "instructions", label: "Instructions" },
     { key: "board", label: "Findings Board" },
     { key: "auction", label: "Live Auction" },

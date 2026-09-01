@@ -3,12 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Logo } from "@/components/Logo";
-import { Notice, StatusDot, TypeChip, cx } from "@/components/primitives";
+import {
+  ConfidenceTag,
+  EvidenceBlock,
+  Notice,
+  RankTag,
+  StatusDot,
+  TypeChip,
+  cx,
+} from "@/components/primitives";
 import { saveAudienceEntry } from "@/lib/actions";
 import { findingsForBreakout, panelRoles, sortedBreakouts } from "@/lib/derive";
 import { eventKey } from "@/lib/firebase-config";
 import { useEvent } from "@/lib/useEvent";
-import type { AudienceEntry, EventState, Finding } from "@/lib/types";
+import {
+  FINDING_TYPES,
+  FINDING_TYPE_META,
+  type AudienceEntry,
+  type EventState,
+  type Finding,
+  type FindingType,
+} from "@/lib/types";
 
 /**
  * The audience play-along, on a phone.
@@ -304,16 +319,50 @@ function Allocator({
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
 
-  const columns = useMemo(
-    () =>
-      sortedBreakouts(state)
-        .map((breakout) => ({
-          breakout,
-          findings: findingsForBreakout(state, breakout.id).filter((f) => f.submitted),
-        }))
-        .filter((column) => column.findings.length > 0),
-    [state],
-  );
+  /**
+   * Twenty-five findings will not fit on a phone as a list, so they arrive
+   * folded into groups.
+   *
+   * Both cuts are offered because they answer different questions. By session
+   * is how the room heard them — five findings from the people who spent the
+   * hour on that subject. By type is how you compare across the whole board:
+   * every Fragility next to every other one. Neither is a subset of the other,
+   * and picking for someone would be picking their reasoning for them.
+   */
+  const [groupBy, setGroupBy] = useState<"session" | "type">("session");
+
+  const groups = useMemo(() => {
+    const board = state.findings.filter((f) => f.submitted);
+
+    if (groupBy === "type") {
+      return FINDING_TYPES.map((type) => ({
+        key: type,
+        label: FINDING_TYPE_META[type].label,
+        hint: FINDING_TYPE_META[type].blurb,
+        accentType: type as FindingType | undefined,
+        findings: board
+          .filter((f) => f.type === type)
+          .sort((a, b) => a.breakoutRank - b.breakoutRank),
+      })).filter((group) => group.findings.length > 0);
+    }
+
+    return sortedBreakouts(state)
+      .map((breakout) => ({
+        key: breakout.id,
+        label: breakout.name,
+        hint: breakout.description,
+        accentType: undefined,
+        findings: findingsForBreakout(state, breakout.id).filter((f) => f.submitted),
+      }))
+      .filter((group) => group.findings.length > 0);
+  }, [state, groupBy]);
+
+  // One group open at a time, so the page never grows back into a long list.
+  // Re-seeded whenever the cut changes, because the old key means nothing.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  useEffect(() => {
+    setOpenGroup(groups[0]?.key ?? null);
+  }, [groups]);
 
   const spent = Object.values(allocations).reduce((sum, value) => sum + value, 0);
   const remaining = budget - spent;
@@ -421,22 +470,94 @@ function Allocator({
         </p>
       ) : null}
 
-      {columns.map(({ breakout, findings }) => (
-        <section key={breakout.id}>
-          <h2 className="eyebrow mb-2 px-1">{breakout.name}</h2>
-          <div className="space-y-2">
-            {findings.map((finding) => (
-              <AllocationRow
-                key={finding.id}
-                finding={finding}
-                credits={allocations[finding.id] ?? 0}
-                remaining={remaining}
-                onChange={(next) => setCredits(finding.id, next)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="flex items-center gap-2 px-1">
+        <span className="text-paper-faint font-mono text-[0.625rem] tracking-[0.12em] uppercase">
+          Group by
+        </span>
+        {(["session", "type"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setGroupBy(option)}
+            className={cx(
+              "rounded-sm border px-2.5 py-1 font-mono text-[0.625rem] font-semibold tracking-[0.1em] uppercase transition-colors",
+              groupBy === option
+                ? "border-signal bg-signal text-ink-900"
+                : "border-ink-400 text-paper-mute",
+            )}
+          >
+            {option === "session" ? "Session" : "Finding type"}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {groups.map((group) => {
+          const inGroup = group.findings.reduce(
+            (sum, finding) => sum + (allocations[finding.id] ?? 0),
+            0,
+          );
+          const isOpen = openGroup === group.key;
+
+          return (
+            <section
+              key={group.key}
+              data-type={group.accentType}
+              className={cx("panel overflow-hidden", group.accentType && "type-bar")}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 p-3 text-left"
+                onClick={() => setOpenGroup(isOpen ? null : group.key)}
+                aria-expanded={isOpen}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="text-paper block text-sm leading-snug font-semibold">
+                    {group.label}
+                  </span>
+                  <span className="text-paper-faint mt-0.5 block font-mono text-[0.625rem] tracking-[0.1em] uppercase">
+                    {group.findings.length} finding
+                    {group.findings.length === 1 ? "" : "s"}
+                    {inGroup > 0 ? (
+                      <span className="text-signal"> · {inGroup} credits</span>
+                    ) : null}
+                  </span>
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="text-paper-faint shrink-0 font-mono text-lg leading-none"
+                >
+                  {isOpen ? "−" : "+"}
+                </span>
+              </button>
+
+              {isOpen ? (
+                <div className="border-ink-500 space-y-2 border-t p-2">
+                  {group.hint ? (
+                    <p className="text-paper-mute px-1 pt-1 text-xs leading-relaxed">
+                      {group.hint}
+                    </p>
+                  ) : null}
+                  {group.findings.map((finding) => (
+                    <AllocationRow
+                      key={finding.id}
+                      state={state}
+                      finding={finding}
+                      // Shown on each row only when the group does not already
+                      // say it — otherwise every card repeats its own heading.
+                      showType={groupBy === "session"}
+                      showBreakout={groupBy === "type"}
+                      credits={allocations[finding.id] ?? 0}
+                      remaining={remaining}
+                      onChange={(next) => setCredits(finding.id, next)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
 
       <div className="border-ink-500 sticky bottom-0 -mx-4 border-t bg-[color:var(--color-ink-900)] px-4 py-3">
         <button
@@ -472,26 +593,39 @@ function Allocator({
 }
 
 /**
- * One finding, with a stepper.
+ * One finding: tap the headline for the case behind it, then allocate.
+ *
+ * The full record sits under the headline rather than behind a link, because
+ * this is the one screen where somebody is being asked to price a finding they
+ * have only heard read aloud once. Everything the breakout wrote down — what
+ * changed, the evidence, why it matters, the dissent — is one tap away without
+ * losing your place in the list.
  *
  * Steps of 5 out of 100: fine enough to express a real ranking, coarse enough
  * that a full portfolio is a handful of taps rather than forty. The number is
  * still typeable for anyone who wants to be precise.
  */
 function AllocationRow({
+  state,
   finding,
   credits,
   remaining,
+  showType,
+  showBreakout,
   onChange,
 }: {
+  state: EventState;
   finding: Finding;
   credits: number;
   remaining: number;
+  showType: boolean;
+  showBreakout: boolean;
   /** Receives the live value and unspent balance; returns the new value. */
   onChange: (next: (credits: number, unspent: number) => number) => void;
 }) {
   const STEP = 5;
   const [expanded, setExpanded] = useState(false);
+  const breakout = state.breakouts.find((b) => b.id === finding.breakoutId);
 
   return (
     <article
@@ -501,28 +635,64 @@ function AllocationRow({
         credits > 0 && "border-signal/45",
       )}
     >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <TypeChip type={finding.type} />
-        <button
-          type="button"
-          className="text-paper-faint hover:text-paper shrink-0 font-mono text-[0.625rem] tracking-[0.1em] uppercase"
-          onClick={() => setExpanded((value) => !value)}
-          aria-expanded={expanded}
-        >
-          {expanded ? "Less" : "More"}
-        </button>
-      </div>
+      {/* The whole heading is the target — a 12px "More" link is not something
+          to ask a thumb to find in a dim room. */}
+      <button
+        type="button"
+        className="w-full text-left"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
+        <span className="mb-2 flex items-start justify-between gap-2">
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {showType ? <TypeChip type={finding.type} /> : null}
+            {showBreakout && breakout ? (
+              <span className="text-paper-mute border-ink-400 rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] font-semibold tracking-[0.1em] uppercase">
+                {breakout.shortName}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-paper-faint shrink-0 font-mono text-[0.625rem] tracking-[0.1em] uppercase">
+            {expanded ? "Hide −" : "Detail +"}
+          </span>
+        </span>
 
-      <p className="text-paper text-sm leading-snug font-medium">{finding.headline}</p>
+        <span className="text-paper block text-sm leading-snug font-medium">
+          {finding.headline}
+        </span>
+      </button>
 
       {expanded ? (
-        <div className="text-paper-mute mt-2 space-y-2 text-xs leading-relaxed">
-          {finding.whatChanged ? <p>{finding.whatChanged}</p> : null}
+        <div className="border-ink-500 mt-3 space-y-3 border-t pt-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <ConfidenceTag level={finding.confidence} />
+            <RankTag rank={finding.breakoutRank} />
+            {breakout ? (
+              <span className="text-paper-faint font-mono text-[0.625em] tracking-[0.1em] uppercase">
+                {breakout.name}
+              </span>
+            ) : null}
+          </div>
+
+          {finding.evidence ? (
+            <Detail label="Evidence">
+              <EvidenceBlock
+                text={finding.evidence}
+                className="text-paper-mute text-xs leading-relaxed"
+              />
+            </Detail>
+          ) : null}
+
           {finding.whyItMatters ? (
-            <p>
-              <span className="text-paper-dim font-semibold">Why it matters:</span>{" "}
-              {finding.whyItMatters}
-            </p>
+            <Detail label="Why it matters">{finding.whyItMatters}</Detail>
+          ) : null}
+
+          {finding.dissent ? (
+            <Detail label="Dissenting view">
+              <p className="border-ink-400 text-paper-mute border-l-2 pl-2 text-xs leading-relaxed italic">
+                {finding.dissent}
+              </p>
+            </Detail>
           ) : null}
         </div>
       ) : null}
@@ -569,5 +739,22 @@ function AllocationRow({
         ) : null}
       </div>
     </article>
+  );
+}
+
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-paper-faint mb-1 font-mono text-[0.5625rem] font-semibold tracking-[0.12em] uppercase">
+        {label}
+      </p>
+      {typeof children === "string" ? (
+        <p className="text-paper-mute text-xs leading-relaxed whitespace-pre-line">
+          {children}
+        </p>
+      ) : (
+        children
+      )}
+    </div>
   );
 }

@@ -15,6 +15,7 @@ import {
 } from "../src/lib/derive.ts";
 import { createEvent } from "../src/lib/seed.ts";
 import { fromSnapshot, toSnapshot } from "../src/lib/serialize.ts";
+import { FIELD_LIMITS, evidenceLines, wordCount } from "../src/lib/types.ts";
 
 function demo() {
   return createEvent({ demo: true, startingBudget: 100 });
@@ -135,6 +136,7 @@ test("a panelist cannot hold more findings than there are rounds", () => {
 
 test("any panelist may take any finding — nothing constrains the combination", () => {
   const state = demo();
+  state.event.roundCount = 5;
   const panelistId = state.panelists[0].id;
 
   // Five findings from a single breakout, all of one panelist's picks.
@@ -185,6 +187,7 @@ test("bids below the minimum are rejected", () => {
 
 test("the budget reserve is a warning by default and an error when enforced", () => {
   const state = demo();
+  state.event.roundCount = 5;
 
   // 98 of 100 on the first of five picks leaves 2 credits for 4 more.
   const input = {
@@ -205,6 +208,7 @@ test("the budget reserve is a warning by default and an error when enforced", ()
 
 test("maxSafeBid reserves one minimum bid for each remaining pick", () => {
   const state = demo();
+  state.event.roundCount = 5;
   state.event.minBid = 2;
 
   const view = allPanelistViews(state)[0];
@@ -313,6 +317,7 @@ test("a round is complete only once every panelist has picked in it", () => {
 
 test("a full five-round draft fills every portfolio and summarises correctly", () => {
   const state = demo();
+  state.event.roundCount = 5;
   const prices = [
     [18, 20, 14, 9, 11],
     [22, 12, 25, 8, 7],
@@ -356,6 +361,64 @@ test("a full five-round draft fills every portfolio and summarises correctly", (
   assert.deepEqual(paid, [...paid].sort((a, b) => b - a));
 });
 
+test("a new event defaults to five panelists, three rounds and 100 credits", () => {
+  const state = createEvent({});
+  assert.equal(state.panelists.length, 5);
+  assert.equal(state.event.roundCount, 3);
+  assert.equal(state.event.startingBudget, 100);
+  assert.ok(state.panelists.every((p) => p.startingBudget === 100));
+});
+
+test("a 3-round, 5-panelist draft reconciles to the correct totals", () => {
+  const state = demo();
+  state.event.roundCount = 3;
+  assert.equal(state.panelists.length, 5);
+
+  const prices = [
+    [30, 25, 20],
+    [40, 15, 10],
+    [22, 22, 22],
+    [50, 30, 15],
+    [12, 8, 5],
+  ];
+
+  for (let round = 0; round < 3; round++) {
+    state.panelists.forEach((panelist, seat) => {
+      award(state, {
+        findingId: firstAvailable(state),
+        panelistId: panelist.id,
+        price: prices[seat][round],
+      });
+    });
+  }
+
+  assert.equal(state.transactions.length, 15);
+  assert.equal(availableFindings(state).length, 10, "ten findings go undrafted");
+
+  allPanelistViews(state).forEach((view, seat) => {
+    assert.equal(view.slots.length, 3, `${view.panelist.name} has three slots`);
+    assert.equal(view.filledCount, 3);
+    assert.equal(view.openCount, 0);
+    assert.equal(view.spent, prices[seat].reduce((a, b) => a + b, 0));
+    assert.equal(view.spent + view.remaining, view.startingBudget);
+  });
+
+  // A full team refuses a fourth pick even with credits to spare.
+  const full = validateAward(state, {
+    findingId: firstAvailable(state),
+    panelistId: state.panelists[4].id,
+    price: 5,
+  });
+  assert.equal(full.ok, false);
+  assert.ok(full.errors.some((e) => e.code === "team_full"));
+
+  const summary = buildSummary(state);
+  assert.equal(summary.draftedFindings, 15);
+  assert.equal(summary.undrafted.length, 10);
+  assert.equal(summary.totalSpent, prices.flat().reduce((a, b) => a + b, 0));
+  assert.equal(summary.totalBudget, 500);
+});
+
 // --- Roles ------------------------------------------------------------------
 
 test("the panel seeds one seat per default role, each with its question", () => {
@@ -364,21 +427,28 @@ test("the panel seeds one seat per default role, each with its question", () => 
 
   assert.deepEqual(
     roles.map((r) => r.name),
-    ["Investor", "Philanthropist", "Climate Scientist", "Economist", "Security Hawk"],
+    [
+      "National Security Advisor",
+      "Treasury Secretary",
+      "Governor",
+      "Utility CEO",
+      "National Lab Director",
+    ],
   );
   assert.ok(roles.every((r) => r.prompt.length > 0), "every seeded role has a prompt");
 });
 
 test("two panelists sharing a role collapse to one entry for the audience", () => {
   const state = createEvent({});
-  state.panelists[1].role = "Investor";
+  const shared = state.panelists[0].role;
+  state.panelists[1].role = shared;
   state.panelists[1].rolePrompt = "";
 
   const roles = panelRoles(state);
-  assert.equal(roles.filter((r) => r.name === "Investor").length, 1);
-  const investor = roles.find((r) => r.name === "Investor");
-  assert.equal(investor.panelists.length, 2);
-  assert.ok(investor.prompt.length > 0, "the first non-empty prompt wins");
+  assert.equal(roles.filter((r) => r.name === shared).length, 1);
+  const merged = roles.find((r) => r.name === shared);
+  assert.equal(merged.panelists.length, 2);
+  assert.ok(merged.prompt.length > 0, "the first non-empty prompt wins");
 });
 
 test("a panelist with no role is left out of the audience's choices", () => {
@@ -491,7 +561,92 @@ test("an audience summary with nobody playing is empty rather than broken", () =
   assert.ok(summary.stats.every((s) => s.average === 0));
 });
 
+// --- Finding shape ----------------------------------------------------------
+
+test("every demo finding sits inside the length targets it is modelling", () => {
+  for (const finding of demo().findings) {
+    const label = `${finding.id}`;
+
+    assert.ok(
+      wordCount(finding.headline) < FIELD_LIMITS.headline.amber,
+      `${label}: headline is ${wordCount(finding.headline)} words, target ${FIELD_LIMITS.headline.target}`,
+    );
+    assert.ok(
+      wordCount(finding.whyItMatters) < FIELD_LIMITS.whyItMatters.amber,
+      `${label}: why-it-matters is ${wordCount(finding.whyItMatters)} words`,
+    );
+
+    const bullets = evidenceLines(finding.evidence);
+    assert.equal(bullets.length, FIELD_LIMITS.evidenceBullets, `${label}: two bullets`);
+    for (const bullet of bullets) {
+      assert.ok(
+        wordCount(bullet) < FIELD_LIMITS.evidenceBullet.amber,
+        `${label}: bullet is ${wordCount(bullet)} words — "${bullet}"`,
+      );
+    }
+
+    assert.equal(finding.whatChanged ?? "", "", `${label}: whatChanged is gone`);
+  }
+});
+
+test("word and bullet counting match how a reader would count them", () => {
+  assert.equal(wordCount(""), 0);
+  assert.equal(wordCount("   \n  "), 0);
+  assert.equal(wordCount("one  two\nthree"), 3);
+  assert.deepEqual(evidenceLines("• first\n\n- second\n   \n* third"), [
+    "first",
+    "second",
+    "third",
+  ]);
+  assert.deepEqual(evidenceLines(""), []);
+});
+
 // --- Persistence -------------------------------------------------------------
+
+test("a schema 2 finding's whatChanged is appended to whyItMatters, not lost", () => {
+  const state = demo();
+  const snapshot = toSnapshot(state);
+  const [id] = Object.keys(snapshot.findings);
+
+  snapshot.findings[id].whatChanged = "Orders shifted from speculative to contracted.";
+  snapshot.findings[id].whyItMatters = "It is resilient to policy reversal.";
+
+  const loaded = fromSnapshot(snapshot);
+  const finding = loaded.findings.find((f) => f.id === id);
+
+  assert.ok(
+    finding.whyItMatters.includes("Orders shifted from speculative to contracted."),
+    "the old text survives",
+  );
+  assert.ok(
+    finding.whyItMatters.includes("It is resilient to policy reversal."),
+    "the existing text survives too",
+  );
+
+  // Migrating on read means it runs on every load — it must not stack up.
+  const again = fromSnapshot(toSnapshot(loaded));
+  assert.equal(
+    again.findings.find((f) => f.id === id).whyItMatters,
+    finding.whyItMatters,
+    "the migration is idempotent",
+  );
+});
+
+test("whatChanged with no whyItMatters becomes the whole field", () => {
+  const state = demo();
+  const snapshot = toSnapshot(state);
+  const [id] = Object.keys(snapshot.findings);
+
+  snapshot.findings[id].whatChanged = "Only this was ever written.";
+  snapshot.findings[id].whyItMatters = "";
+
+  const loaded = fromSnapshot(snapshot);
+  assert.equal(
+    loaded.findings.find((f) => f.id === id).whyItMatters,
+    "Only this was ever written.",
+  );
+});
+
 
 test("audience entries round-trip, and junk allocations are scrubbed on read", () => {
   const state = demo();

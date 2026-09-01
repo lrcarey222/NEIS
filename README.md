@@ -16,12 +16,17 @@ board, and lets an operator record each result so every screen updates instantly
 Everything is set up and running. Firebase is connected, the site is deployed, and all screens
 sync live across devices.
 
+The app also **runs the day**, not just the auction: the agenda, the clock and
+the projected title cards are all in here, so the run of show is on the wall
+rather than in a Word document nobody in the room can see.
+
 | Screen | URL | PIN |
 | --- | --- | --- |
 | **Operator control room** | [`/control/`](https://lrcarey222.github.io/NEIS/control/) | `2026` |
-| **Big screen display** | [`/display/`](https://lrcarey222.github.io/NEIS/display/) — instructions, findings board, auction, portfolios, audience | none — public |
+| **Big screen display** | [`/display/`](https://lrcarey222.github.io/NEIS/display/) — segment card, instructions, findings board, auction, portfolios, audience | none — public |
 | **Breakout workspace** | [`/breakout/manufacturing/`](https://lrcarey222.github.io/NEIS/breakout/manufacturing/) · [`auto`](https://lrcarey222.github.io/NEIS/breakout/auto/) · [`clean-firm`](https://lrcarey222.github.io/NEIS/breakout/clean-firm/) · [`grid`](https://lrcarey222.github.io/NEIS/breakout/grid/) · [`ai`](https://lrcarey222.github.io/NEIS/breakout/ai/) | `1234` |
 | **Audience play-along** | [`/play/`](https://lrcarey222.github.io/NEIS/play/) | none — public |
+| **Run of show** | [`/agenda/`](https://lrcarey222.github.io/NEIS/agenda/) — the day on a phone, updating live | none — public |
 | **Printable summary** | [`/summary/`](https://lrcarey222.github.io/NEIS/summary/) | none |
 | **Landing page + QR codes** | [`/`](https://lrcarey222.github.io/NEIS/) | none |
 
@@ -37,12 +42,24 @@ sync live across devices.
 **Configure the event** — `/control/` → **Setup**:
 
 - Event title and subtitle (shown across the top of the big screen)
-- The number of **rounds** — how many findings each panelist ends up holding (default 5)
-- The real **panelist names**, their **roles**, and the starting budget (default 100 credits)
+- The number of **rounds** — how many findings each panelist ends up holding (default 3)
+- The real **panelist names**, their **roles**, and the starting budget (default 5 seats,
+  100 credits each)
 - Each role's **action prompt** — the question that panelist is answering, projected beside
-  their picks. Typing one of the five built-in role names fills its prompt in for you.
+  their picks. Typing one of the built-in role names fills its prompt in for you.
 - Whether to run the **audience play-along**, and the credits each person gets
 - Rename breakouts if needed, and **set a PIN per room**
+
+The five built-in roles and the question each one is answering. Custom roles and prompts
+work exactly the same way — these are only the defaults a new event arrives with.
+
+| Role | Action prompt |
+| --- | --- |
+| **National Security Advisor** | Which findings most reduce exposure to coercion, disruption, or untrusted supply? |
+| **Treasury Secretary** | Which findings most improve productivity, market share, and the ability to compete without indefinite protection? |
+| **Governor** | Which findings most determine whether this agenda delivers visible benefits and survives a change of administration? |
+| **Utility CEO** | Which findings most affect reliable, abundant, predictably priced power for households and strategic industry? |
+| **National Lab Director** | Which findings most affect durable emissions reductions, deployment speed, learning, and technology diffusion? |
 
 > **There are no strategic objectives.** A panelist may buy any finding for any reason. What
 > makes a portfolio judgeable is the role it was drafted for, which is why the prompt is on
@@ -53,6 +70,10 @@ sync live across devices.
 1. Type `RESET` in the confirmation box
 2. **New live event (empty)** — clears the rehearsal data
 3. **Seed empty finding templates** — gives every room its five blank cards
+
+**Check the run of show** — `/control/` → **Run of Show**. The default agenda is the
+23 September schedule; adjust titles, speakers, durations and operator notes to match
+what is actually happening. See [Running the day](#running-the-day).
 
 **Set up the room:**
 
@@ -76,6 +97,120 @@ QR codes carry `?event=rehearsal` through when the projector is on the rehearsal
 >
 > The same applies to the play-along: `/play/` has no PIN at all, by design — a QR code a whole
 > room scans cannot also be a gate. Anyone with the link can submit a portfolio.
+
+## 1b. Running the day
+
+The **bar across the top of `/control/`** is the run of show. It is above the tabs
+deliberately: you will be on the Auction tab recording bids while the clock runs, and a
+countdown you have to navigate away from is a countdown nobody looks at.
+
+It reads: what is running · time remaining or overrun · **how far behind the day is** ·
+what is next. Then three controls:
+
+| Control | Effect |
+| --- | --- |
+| **NEXT SEGMENT** | Advances the day and **switches the projector** to that segment's screen. Confirmed, because it moves what is in front of the room. |
+| **PAUSE / RESUME** | Holds the clock without corrupting the rest of the schedule. |
+| **+5 MIN** | Lengthens the live segment, so the knock-on shows up in the drift figure and in the projected start times. |
+
+> **Nothing advances by itself.** A segment that runs over keeps running and shows
+> `+3:20 OVER`. Advancing is always your click — the app will never move the projector in
+> front of the room on a timer.
+
+**Drift** — "on time", "6 min behind", "4 min ahead" — is the single most useful number on
+the screen. It is measured live: an overrun pushes it out minute by minute, and finishing
+early pulls it back at the next advance. A pause counts as falling behind, because a
+four-minute hold is four minutes the room actually spent.
+
+### The default agenda
+
+Every new event arrives with this. Edit it on the Run of Show tab.
+
+| # | Start | Min | Segment | Big screen |
+| --- | --- | --- | --- | --- |
+| 1 | 8:30 | 15 | Welcome and Framing | Segment card |
+| 2 | 8:45 | 55 | Where Do Things Stand Today | Segment card |
+| 3 | 9:40 | 10 | Move to Breakout Rooms | Instructions |
+| 4 | 9:50 | 75 | Breakout Sessions — seven phases | Findings board |
+| 5 | 11:05 | 10 | Transition and Seating | Instructions |
+| 6 | 11:15 | 15 | Breakout Presentations — 5 × 2:30, hard-timed | Findings board |
+| 7 | 11:30 | 5 | Panel Questions | Findings board |
+| 8 | 11:35 | 35 | Strategic Findings Auction | Live auction |
+| 9 | 12:10 | 8 | Team Defenses | Final portfolios |
+| 10 | 12:18 | 10 | Audience vs Panel and Synthesis | Audience vs panel |
+| 11 | 12:28 | 2 | Close | Segment card |
+| 12 | 12:30 | 60 | Lunch | Segment card |
+
+Segment 2's speakers are seeded as Jon Larsen; Brian Deese / Charlie Anderson; Mike
+Catanzaro. Segment 8 carries an operator note: *if still in round 2 at 12:00, call the final
+round at 60 seconds a lot with no rationale until the defenses.*
+
+The **Run of Show tab** is everything that is not the clock:
+
+- **Presenter view** at the top: the operator notes for the current and next segment, at a
+  size you can read from a laptop on a table. These are never projected.
+- **Reorder, retime, edit and jump** to any segment out of order. Editing a duration
+  recomputes the projected wall-clock starts immediately, so you can see what five more
+  minutes on the opening panel does to the 12:30 lunch before you commit to it. The stored
+  start time stays put until you click the arrow to apply the new one, because the printed
+  agenda and the table cards still say 9:50.
+- **Reset day** clears the clock and keeps the agenda.
+- **Agenda strip on the big screen** toggles the band along the bottom of `/display/`.
+  Turn it off during the auction if the screen feels full.
+
+### What the room sees
+
+The **Segment card** display mode projects the live segment: title large, description,
+speakers, and a big clock. This is what fills 8:30–9:40, where the projector previously
+had nothing useful to show.
+
+The **agenda strip** is available under every display mode — a thin band showing the day
+with the current segment marked and past ones dimmed. It answers "where are we" and "when
+is lunch" without a slide change.
+
+`/agenda/` is the same thing on a phone, public and PIN-free, with its QR code on the
+Instructions screen next to the breakout codes. It updates live, so it shows what is
+actually happening rather than what was printed.
+
+### The breakout phase strip
+
+The breakout segment carries seven phases, and `/breakout/<slug>` renders them above the
+cards with the current one highlighted and its remaining time. The phase at minute 35
+says *"Typists: open your cards now and start typing headlines"*, and it is the largest
+text in the strip.
+
+This is the mitigation for the biggest risk in the day — a room that discusses for seventy
+minutes and then finds it has five to write in.
+
+| Minutes | Phase |
+| --- | --- |
+| 0–5 | Set the frame — sector boundary, candid assessment not consensus |
+| 5–20 | Status update — the 5–7 most consequential changes since March 2025 |
+| 20–35 | Interrogate — separate announcements from implementation and outcomes |
+| 35–55 | Diagnose — **typists: open your cards now and start typing headlines** |
+| 55–68 | Draft the five findings |
+| 68–73 | Sharpen and rank |
+| 73–75 | Presenter and submit |
+
+### The presentation timer
+
+Segment 6 is five breakout presentations at 2:30 each, hard-timed. When that segment is
+live, a **NEXT PRESENTER** control appears on the operator bar and the display overlays
+the findings board with the room's name and a large countdown — amber at 0:30, red at
+0:00, then counting up, because a clock that stops at zero stops being a deadline. Five
+presenters are tracked in order, so you can see three are done and two remain.
+
+### Two things that are true of every clock in the app
+
+**No screen writes on a tick.** The database holds one start timestamp per segment and
+every screen computes remaining time locally from it. A room with eight screens open
+generates zero writes a second. You can verify this in the Firebase console: watch
+`runOfShow` while the clock runs and nothing changes until somebody clicks.
+
+**Clock skew is corrected.** The projector and your laptop will not agree to the second,
+so every screen reads Firebase's `/.info/serverTimeOffset` and converts before doing any
+arithmetic. Two browsers on the same event show the same remaining time to within a
+second.
 
 ## 2. During the breakouts
 
@@ -123,6 +258,12 @@ count of how many people have submitted.
 Each person scans it, enters their name, picks one of the panel's **roles**, and spends their own
 credits across the board — the same exercise, from the same brief, at the same time.
 
+Twenty-five findings do not fit on a phone as a list, so they arrive folded into **collapsible
+groups**, one open at a time. A *Group by* switch offers two cuts: **Session**, which is how the
+room heard them, and **Finding type**, which puts every Fragility next to every other one.
+Tapping a finding opens the breakout's full record underneath it — the evidence, why it matters,
+the confidence, and any dissenting view — without losing your place in the list.
+
 The **Audience** tab is your view of it: the code to hold up if a table cannot find it, the
 counts, the room-versus-panel table in reading order, and the roster if you need to remove a
 duplicate or a test entry.
@@ -151,9 +292,14 @@ the top pick under each role.
 > price is: what one participant, holding one budget, paid for one finding. Averaging over
 > backers instead would let two enthusiasts outrank the whole room.
 
-They are separate screens rather than one split view because four portfolios plus three summary
-panels cannot both stay legible from the back of a room at 16:9. No winner is declared unless
-you enable it in Setup.
+They are separate screens rather than one split view because five portfolios plus three summary
+panels cannot both stay legible from the back of a room at 16:9. Three picks per panelist
+instead of five leaves each portfolio card room to show more of its headlines, and the
+column count follows the roster rather than being fixed. No winner is declared unless you
+enable it in Setup.
+
+Advance to **Close** and then **Lunch** on the operator bar as you go; the projector shows
+each as a title card, so the room is never looking at a stale auction board.
 
 **Export** from the toolbar on `/control/`: **Findings CSV** (carrying the audience columns too),
 **Ledger CSV**, **Portfolios CSV**, **Audience CSV**, and a **Printable summary** page
@@ -166,8 +312,31 @@ you enable it in Setup.
 Open your room's link and enter the PIN from your table card. Five cards are already there, one
 per finding type — Momentum, Fragility, Bottleneck, Underappreciated Opportunity, Wildcard.
 
-Each takes a headline, what changed, evidence (one point per line), why it matters, confidence,
-and an optional dissenting view.
+Each takes a **headline**, **evidence** (one bullet per line), **why it matters** and
+**confidence**, plus an optional dissenting view behind a link.
+
+Headline, why-it-matters and confidence are marked *required*; evidence is encouraged.
+None of it blocks submission — you have about thirteen minutes and being refused at the
+last moment is the worst possible time to find out. Submitting confirms with a count
+("5 findings — 5 headlines, 4 with evidence") so you can decide whether the missing piece
+is worth the last two minutes.
+
+**Length targets.** A counter under each field turns amber at the target and red well past
+it. These are legibility limits before they are time limits — a forty-word headline does
+not read from the back of the room however long there was to write it.
+
+| Field | Target |
+| --- | --- |
+| Headline | ≤ 20 words, and a **conclusion** rather than a topic |
+| Evidence | 2 bullets, ≤ 15 words each. A third is kept but marked *won't project* |
+| Why it matters | ≤ 40 words |
+
+Nothing is blocked. There is a hard character limit at roughly double each target, only so
+a pasted paragraph cannot destroy the projected layout.
+
+> **There is no "what changed" field.** If the headline is a real conclusion rather than a
+> topic, what changed is already inside it — asking for both made every room write the
+> finding twice.
 
 - **Everything saves automatically when you leave a field.** There is no save button to forget.
 - The **↑/↓** buttons set your group's 1–5 ranking.
@@ -192,6 +361,7 @@ because they act on **everyone** — including a breakout room mid-sentence.
 | **Seed empty finding templates** | Gives every room its five blank cards. Skips rooms that already have findings. |
 | **Submit all breakouts** | Publishes everything currently written. Handy mid-rehearsal. |
 | **Reset the auction** | Clears all transactions, returns to Round 0, **keeps every finding**. Use this between the rehearsal auction and the real one. |
+| **Reset day** (Run of Show tab) | Clears the run-of-show clock and keeps the agenda. Use this between a rehearsal run and the real one. |
 | **Clear the audience play-along** | Removes every entry. Run this between the rehearsal and the real session. |
 | **Clear all findings** | Removes findings and transactions, keeps panelists and settings. |
 | **New demo event** | Wipes everything and reloads the 25 sample findings. For rehearsal. |
@@ -287,6 +457,15 @@ default `".read": "now < ..."` timestamp rule.
 Check the PIN in `/control/` → Setup → Breakouts. The admin PIN opens every room, so you can
 always take over from the control laptop.
 
+**The Run of Show tab says there is no agenda.**
+That event was created before the run of show existed. **Load the default run of show** on
+that tab adds it and leaves findings, panelists and the ledger untouched.
+
+**The clock is wrong on the projector but right on the control laptop.**
+That would mean `/.info/serverTimeOffset` never arrived. Check the projector's connection
+badge reads **Live** — a screen in local-only mode has no server to correct against and
+falls back to its own clock.
+
 **A finding is wrong after it was sold.**
 Ledger tab → **Edit** on that transaction. You can change the panelist, the price and the note in
 place, or delete it entirely.
@@ -309,20 +488,22 @@ into `out/`, which GitHub Pages serves. Nothing can crash mid-session because no
 ```
 src/lib/types.ts            Domain model
 src/lib/derive.ts           Pure selectors + every auction rule
-src/lib/seed.ts             Event scaffolding + the 25 demo findings
+src/lib/schedule.ts         Pure run-of-show timing: remaining, drift, phases
+src/lib/seed.ts             Event scaffolding + the 25 demo findings + the agenda
 src/lib/firebase-config.ts  Firebase project values
 src/lib/net.ts              Transport: Firebase adapter | local fallback
 src/lib/serialize.ts        EventState (arrays) ⇄ RTDB (keyed objects)
 src/lib/actions.ts          Every mutation
 src/lib/localAuth.ts        PIN → role, in the browser
-src/lib/useEvent.ts         The hook every screen reads from
-tests/                      Rule tests + live end-to-end walkthrough
+src/lib/useEvent.ts         The hook every screen reads from, plus the shared clock
+tests/                      Rule + schedule tests, and a live end-to-end walkthrough
 ```
 
-The pages are `/control`, `/display`, `/breakout/<slug>`, `/summary`, and `/play` — the audience
-page, public and PIN-free, one entry per phone under `audience/<id>`.
+The pages are `/control`, `/display`, `/breakout/<slug>`, `/summary`, `/play` — the audience
+page, public and PIN-free, one entry per phone under `audience/<id>` — and `/agenda`, the
+public run of show.
 
-Three decisions carry most of the weight:
+Four decisions carry most of the weight:
 
 **The transaction log is the only source of truth for the auction.** A `Finding` never stores who
 bought it or for how much — budgets, availability and portfolios are all derived from
@@ -337,6 +518,13 @@ other. The end-to-end test fires all five rooms' writes at once and asserts noth
 **Awards go through a database transaction.** `awardFinding` re-runs the full validation *inside*
 an RTDB transaction, against committed state rather than whatever this browser happened to be
 rendering. Two operators clicking AWARD on the same finding cannot both succeed.
+
+**No clock writes on a tick.** The run of show stores one start timestamp per segment;
+`schedule.ts` is pure and takes `now` as a parameter, so every screen computes remaining
+time, overrun and drift locally from that one stamp. Eight screens in a room produce zero
+writes a second. The same property is what makes the timing model unit-testable against a
+fake clock, and the end-to-end test asserts the `runOfShow` node is byte-identical after
+several seconds of a running clock.
 
 There is one adapter boundary: when the Firebase config is unfilled, or the URL carries
 `?local=1`, `net()` returns a localStorage + BroadcastChannel adapter with an identical
@@ -436,20 +624,35 @@ in `/control/` → Setup, so you can change them on the day.
 npm test
 ```
 
-26 unit tests over the rule engine and the audience arithmetic: budget maths, double-sale and
-full-team rejection, minimum bid, the reserve rule in both modes, undo restoring state exactly,
-editing a transaction excluding itself from its own checks, a full five-round draft reconciling
-to correct totals, the role roster, audience averages dividing by everyone rather than by
-backers, the room-versus-panel gap, and a schema 1 event still loading. Pure — no network.
+55 unit tests, pure and with no network.
+
+`tests/rules.test.mjs` covers the rule engine and the audience arithmetic: budget maths,
+double-sale and full-team rejection, minimum bid, the reserve rule in both modes, undo
+restoring state exactly, editing a transaction excluding itself from its own checks, both a
+five-round and a 3-round/5-panelist draft reconciling to correct totals, the role roster,
+audience averages dividing by everyone rather than by backers, the room-versus-panel gap,
+the demo findings sitting inside their own length targets, the `whatChanged` → `whyItMatters`
+migration losing nothing and being idempotent, and a schema 1 event still loading.
+
+`tests/schedule.test.mjs` covers the timing model, every test driving a fake clock:
+remaining time from a fixed start, pause and resume accumulating across two pauses,
+overruns going negative rather than clamping, drift against planned cumulative start,
+advancing stamping the start and switching the display mode, advancing past the last
+segment being a no-op, the clock-skew offset applied consistently across three devices with
+three wrong clocks, the seven breakout phases, the presentation sub-timer, projected
+wall-clock starts, and an event with no `runOfShow` at all still loading.
 
 ```bash
 node --import ./tests/ts-resolver.mjs tests/e2e.mjs https://neis-climate-week-default-rtdb.firebaseio.com
 ```
 
 Checks against live Firebase: event round-trip, keyed-not-array storage, seeding all five rooms,
-**five rooms writing simultaneously with nothing lost**, submit and reopen, twenty awards across
-five rounds, rule enforcement against live data, undo, **forty phones submitting a play-along
-portfolio at once with nothing lost**, and resetting the auction while keeping findings.
+**five rooms writing simultaneously with nothing lost**, submit and reopen, fifteen awards across
+three rounds, rule enforcement against live data, undo, **forty phones submitting a play-along
+portfolio at once with nothing lost**, advancing through three segments with every screen's
+derived state agreeing (including three devices with three wrong clocks reading the same
+remaining time), **no write happening while the clock runs**, and resetting the auction while
+keeping findings.
 
 It works under `neis/events/__e2e` and deletes that node when it finishes, so it is safe to run
 against the event database — but run it *before* the session, not during.
@@ -477,7 +680,9 @@ segment so a `".write": "auth.uid === $uid"` rule can be added without touching 
 - The connection indicator on every screen reads **Live** on Firebase, **Local only** in red when
   this browser is not syncing, and **No event** before one is created.
 - `/display/` shortcuts: **1** Findings Board, **2** Live Auction, **3** Final Portfolios,
-  **4** Audience vs Panel, **5** Instructions, **F** fullscreen. These are a local override in case the operator's machine drops off the
-  network; the badge in the header says so, and the next change from `/control/` takes back over.
+  **4** Audience vs Panel, **5** Instructions, **6** Segment card, **F** fullscreen. These are a
+  local override in case the operator's machine drops off the network; the badge in the header
+  says so, and the next change from `/control/` takes back over. Advancing a segment also
+  changes the mode — the keys and the buttons then override it without moving the schedule.
 - Colour is never the only signal. Every finding type shows its glyph and full name, and
   confidence shows both bars and text.

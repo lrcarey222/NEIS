@@ -47,6 +47,12 @@ export const DISPLAY_MODES = [
   "audience",
   /** The pre-session briefing: how to join, what to write, what happens next. */
   "instructions",
+  /**
+   * A title card for the segment currently running: name, description,
+   * speakers, clock. This is what fills the opening panel, the transitions and
+   * the close — stretches where the projector otherwise had nothing to show.
+   */
+  "card",
 ] as const;
 export type DisplayMode = (typeof DISPLAY_MODES)[number];
 
@@ -67,6 +73,99 @@ export interface TimerState {
   label: string;
   /** When false, /display hides the timer entirely. */
   visible: boolean;
+}
+
+// --- The run of show -------------------------------------------------------
+
+/**
+ * What the projector switches to when a segment is advanced.
+ *
+ * Named for what the segment *is* rather than for the display mode it happens
+ * to use, which is why "findings" here is "board" there — three different
+ * segments (the breakouts, the presentations, the panel questions) all sit on
+ * the findings board, and calling them "board" segments would say nothing
+ * about the day.
+ */
+export const SEGMENT_KINDS = [
+  "card",
+  "instructions",
+  "findings",
+  "auction",
+  "portfolios",
+  "audience",
+] as const;
+export type SegmentKind = (typeof SEGMENT_KINDS)[number];
+
+export const DISPLAY_MODE_FOR_SEGMENT: Record<SegmentKind, DisplayMode> = {
+  card: "card",
+  instructions: "instructions",
+  findings: "board",
+  auction: "auction",
+  portfolios: "portfolios",
+  audience: "audience",
+};
+
+/**
+ * One step inside a segment — the breakout's internal run of show.
+ *
+ * This is the mitigation for the biggest risk in the day: a room that talks
+ * for seventy minutes and writes for five. The phase strip at minute 35 says
+ * "open your cards and start typing", and it is on the facilitator's screen
+ * whether or not anyone is watching the clock.
+ */
+export interface Phase {
+  title: string;
+  minutes: number;
+  note?: string;
+}
+
+export interface Segment {
+  id: string;
+  title: string;
+  /** One or two sentences, projected on the title card. */
+  description?: string;
+  speakers?: string[];
+  /** Who is running it. Operator view only — never projected. */
+  owner?: string;
+  /** Speaker notes for the operator. Never projected. */
+  operatorNotes?: string;
+  /** Wall clock, "08:30". For the printed agenda and the operator's view. */
+  plannedStart: string;
+  plannedMinutes: number;
+  displayMode: SegmentKind;
+  phases?: Phase[];
+  /** Runs the hard-timed per-presenter sub-clock. See lib/schedule.ts. */
+  presentationTimer?: boolean;
+  /** Seconds each presenter gets. Defaults to 150. */
+  presentationSeconds?: number;
+  /** How many presenters to track, so the operator can see 3 done, 2 left. */
+  presenterCount?: number;
+}
+
+/**
+ * Where the day has got to.
+ *
+ * Every screen computes remaining time locally from `segmentStartedAt`, which
+ * is why this record holds a start stamp and never a countdown: a room with
+ * eight screens open must not generate eight writes a second. Nothing in here
+ * is written on a timer — only when the operator clicks.
+ */
+export interface ScheduleState {
+  segments: Segment[];
+  activeSegmentId: string | null;
+  /** Server epoch ms, so every screen agrees. Null before the day starts. */
+  segmentStartedAt: number | null;
+  /** Server epoch ms the clock was held at, or null when running. */
+  pausedAt: number | null;
+  /** Paused milliseconds accumulated within the active segment. */
+  pausedMs: number;
+  /** Stamped by the first advance. Drift is measured against it. */
+  dayStartedAt: number | null;
+  /** -1 when the presentation sub-timer has not been started. */
+  presenterIndex: number;
+  presenterStartedAt: number | null;
+  /** The thin agenda band along the bottom of /display. */
+  agendaVisible: boolean;
 }
 
 export interface EventConfig {
@@ -122,7 +221,16 @@ export interface Finding {
   breakoutId: string;
   type: FindingType;
   headline: string;
-  whatChanged: string;
+  /**
+   * Removed from the form in schema 3. A room has thirteen minutes for five
+   * findings, and a headline that is a real conclusion already contains what
+   * changed — asking for both made every room write the finding twice.
+   *
+   * Kept on the type, and read on load, only so events written before the
+   * change survive: lib/serialize.ts appends any text found here to
+   * `whyItMatters` rather than dropping it.
+   */
+  whatChanged?: string;
   evidence: string;
   whyItMatters: string;
   confidence: Confidence;
@@ -140,7 +248,7 @@ export interface Panelist {
   name: string;
   affiliation: string;
   /**
-   * The lens this panelist drafts through — "Investor", "Security Hawk". Free
+   * The lens this panelist drafts through — "Governor", "Utility CEO". Free
    * text, because the panel is whoever turns up.
    */
   role: string;
@@ -198,6 +306,8 @@ export interface EventState {
   transactions: Transaction[];
   audience: AudienceEntry[];
   timer: TimerState;
+  /** The agenda, the clock and where the day has got to. See lib/schedule.ts. */
+  runOfShow: ScheduleState;
   /** Monotonic counter; every mutation increments it. Clients use it to
    *  discard out-of-order snapshots that arrive over a flaky connection. */
   revision: number;
@@ -208,8 +318,47 @@ export interface EventState {
  * picks), gave panelists a role and an action prompt, and added the audience
  * play-along. lib/serialize.ts reads a version 1 event without complaint: its
  * objectives are ignored and its `objectiveId` on a transaction is dropped.
+ *
+ * 3 dropped the finding's `whatChanged` field and added the run of show. A
+ * version 2 event still loads: its `whatChanged` text is appended to
+ * `whyItMatters` rather than discarded, and an event with no `runOfShow` gets
+ * an empty one, which every screen renders as "no schedule loaded".
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+
+/**
+ * Soft length targets for the finding form.
+ *
+ * These are legibility limits before they are time limits: a forty-word
+ * headline does not read from the back of a conference room at 16:9, however
+ * long the room had to write it. The counters warn and then shout, but never
+ * block — nothing stops a facilitator mid-sentence. `maxLength` is roughly
+ * double the target and exists only so a pasted paragraph cannot destroy the
+ * projected layout.
+ */
+export const FIELD_LIMITS = {
+  headline: { target: 20, amber: 20, red: 28, maxLength: 280 },
+  /** Per bullet, not for the whole box. */
+  evidenceBullet: { target: 15, amber: 15, red: 22 },
+  /** Bullets beyond this are kept but flagged as "won't project". */
+  evidenceBullets: 2,
+  evidenceMaxLength: 480,
+  whyItMatters: { target: 40, amber: 40, red: 55, maxLength: 560 },
+  dissentMaxLength: 400,
+} as const;
+
+/** Words, the way a reader counts them. */
+export function wordCount(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
+/** Evidence lines, bullet markers and blank lines stripped. */
+export function evidenceLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^[•\-*]\s*/, "").trim())
+    .filter(Boolean);
+}
 
 /**
  * Who the current browser is acting as. Declared here rather than in lib/auth
@@ -287,28 +436,29 @@ export const CONFIDENCE_META: Record<
  */
 export const DEFAULT_ROLES: { name: string; prompt: string }[] = [
   {
-    name: "Investor",
-    prompt: "What is the strongest portfolio of investable opportunities on this board?",
-    },
-  {
-    name: "Philanthropist",
+    name: "National Security Advisor",
     prompt:
-      "Where would catalytic, risk-tolerant capital move the needle furthest — and nobody else will fund it?",
+      "Which findings most reduce exposure to coercion, disruption, or untrusted supply?",
   },
   {
-    name: "Climate Scientist",
+    name: "Treasury Secretary",
     prompt:
-      "Which of these matter most for the pace of emissions reduction over the next decade?",
+      "Which findings most improve productivity, market share, and the ability to compete without indefinite protection?",
   },
   {
-    name: "Economist",
+    name: "Governor",
     prompt:
-      "Which of these tell us most about growth, prices, and where productivity actually comes from?",
+      "Which findings most determine whether this agenda delivers visible benefits and survives a change of administration?",
   },
   {
-    name: "Security Hawk",
+    name: "Utility CEO",
     prompt:
-      "Which of these most affect national security, critical supply chains, and strategic industrial capacity?",
+      "Which findings most affect reliable, abundant, predictably priced power for households and strategic industry?",
+  },
+  {
+    name: "National Lab Director",
+    prompt:
+      "Which findings most affect durable emissions reductions, deployment speed, learning, and technology diffusion?",
   },
 ];
 

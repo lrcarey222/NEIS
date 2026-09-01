@@ -66,6 +66,16 @@ export interface Adapter {
   /** Announce this browser as present in `room`; cleared on disconnect. */
   announce(room: string): void;
   subscribePresence(onPresence: (present: Presence[]) => void): () => void;
+  /**
+   * Signed milliseconds to add to this device's clock to land on the server's.
+   *
+   * The projector and the operator's laptop will not agree to the second, and
+   * a countdown that differs between two screens in the same room is worse
+   * than no countdown. Every screen adds this before doing any run-of-show
+   * arithmetic, so they all compute the same remaining time from the same
+   * stored start stamp. Fires immediately with the current value.
+   */
+  subscribeClockOffset(onOffset: (offsetMs: number) => void): () => void;
 }
 
 // --- Identity --------------------------------------------------------------
@@ -177,6 +187,18 @@ function firebaseAdapter(database: Database, key: string): Adapter {
         () => onPresence([]),
       );
     },
+
+    subscribeClockOffset(onOffset) {
+      // A synthetic node the SDK maintains locally; reading it costs nothing
+      // and it re-fires whenever the estimate is refined.
+      return onValue(
+        ref(database, ".info/serverTimeOffset"),
+        (snapshot) => onOffset(Number(snapshot.val()) || 0),
+        // A skewed clock is far better than a broken screen: fall back to
+        // this device's own time rather than failing the subscription.
+        () => onOffset(0),
+      );
+    },
   };
 }
 
@@ -230,6 +252,52 @@ function localAdapter(key: string): Adapter {
     }
   };
 
+  /**
+   * Applies one write to a list of id-carrying records, exactly as Firebase
+   * would: an absent record is created, a null value deletes it, and a deeper
+   * path edits one field of it.
+   *
+   * Returns the list to store, because a whole-collection write replaces it.
+   */
+  const applyToList = (
+    list: { id: string; [k: string]: unknown }[],
+    id: string | undefined,
+    rest: string[],
+    value: unknown,
+  ): { id: string; [k: string]: unknown }[] => {
+    // Whole-collection write: `findings: null` to clear, or a keyed map to
+    // replace. Firebase treats these as ordinary values at that path, so the
+    // local adapter has to as well or "clear all findings" silently does
+    // nothing here.
+    if (id === undefined) {
+      return value && typeof value === "object"
+        ? Object.entries(value as Record<string, { id?: string }>).map(
+            ([recordId, record]) => ({ ...record, id: record.id ?? recordId }),
+          )
+        : [];
+    }
+
+    const index = list.findIndex((item) => item.id === id);
+
+    if (rest.length === 0) {
+      const record = value as { id: string } | null;
+      if (record === null) {
+        if (index >= 0) list.splice(index, 1);
+      } else if (index >= 0) list[index] = { ...list[index], ...record, id };
+      else list.push({ ...record, id });
+      return list;
+    }
+
+    if (index < 0) return list;
+    let target = list[index] as Record<string, unknown>;
+    for (let i = 0; i < rest.length - 1; i++) {
+      target = target[rest[i]] as Record<string, unknown>;
+      if (!target) return list;
+    }
+    target[rest[rest.length - 1]] = value;
+    return list;
+  };
+
   /** Walks a slash path into the state object and assigns. */
   const applyPath = (state: EventState, path: string, value: unknown) => {
     const parts = path.split("/").filter(Boolean);
@@ -253,47 +321,50 @@ function localAdapter(key: string): Adapter {
     ];
 
     if (collections.includes(collection)) {
-      // Whole-collection write: `findings: null` to clear, or a keyed map to
-      // replace. Firebase treats these as ordinary values at that path, so the
-      // local adapter has to as well or "clear all findings" silently does
-      // nothing here.
-      if (id === undefined) {
-        const replacement =
-          value && typeof value === "object"
-            ? Object.entries(value as Record<string, { id?: string }>).map(
-                ([recordId, record]) => ({ ...record, id: record.id ?? recordId }),
-              )
-            : [];
-        (state as unknown as Record<string, unknown>)[collection] = replacement;
-        return;
-      }
-
       const list = state[collection as keyof EventState] as unknown as {
         id: string;
         [k: string]: unknown;
       }[];
-      const index = list.findIndex((item) => item.id === id);
-
-      if (rest.length === 0) {
-        const record = value as { id: string } | null;
-        if (record === null) {
-          if (index >= 0) list.splice(index, 1);
-        } else if (index >= 0) list[index] = { ...list[index], ...record, id };
-        else list.push({ ...record, id });
-        return;
-      }
-
-      if (index < 0) return;
-      let target = list[index] as Record<string, unknown>;
-      for (let i = 0; i < rest.length - 1; i++) {
-        target = target[rest[i]] as Record<string, unknown>;
-        if (!target) return;
-      }
-      target[rest[rest.length - 1]] = value;
+      (state as unknown as Record<string, unknown>)[collection] = applyToList(
+        list,
+        id,
+        rest,
+        value,
+      );
       return;
     }
 
-    // Scalar sub-trees: event/*, timer/*, revision
+    // The schedule's segments are the one nested collection: they carry ids
+    // and are addressed as `runOfShow/segments/<id>/<field>`, so they need the
+    // same treatment one level down.
+    if (collection === "runOfShow" && id === "segments") {
+      const [segmentId, ...fields] = rest;
+      state.runOfShow.segments = applyToList(
+        state.runOfShow.segments as unknown as { id: string }[],
+        segmentId,
+        fields,
+        value,
+      ) as unknown as EventState["runOfShow"]["segments"];
+      return;
+    }
+
+    // Order lives beside the map rather than in it, because RTDB does not
+    // preserve the order of an object's keys. Applying it here keeps a
+    // reorder atomic in this adapter too.
+    if (collection === "runOfShow" && id === "segmentOrder") {
+      const order = (Array.isArray(value) ? value : []) as string[];
+      const byId = new Map(state.runOfShow.segments.map((s) => [s.id, s]));
+      const ordered = order
+        .map((segmentId) => byId.get(segmentId))
+        .filter(Boolean) as EventState["runOfShow"]["segments"];
+      for (const segment of state.runOfShow.segments) {
+        if (!order.includes(segment.id)) ordered.push(segment);
+      }
+      state.runOfShow.segments = ordered;
+      return;
+    }
+
+    // Scalar sub-trees: event/*, timer/*, runOfShow/*, revision
     let target = state as unknown as Record<string, unknown>;
     for (let i = 0; i < parts.length - 1; i++) {
       target = target[parts[i]] as Record<string, unknown>;
@@ -365,6 +436,12 @@ function localAdapter(key: string): Adapter {
       onPresence(readPresence());
       const id = setInterval(() => onPresence(readPresence()), 4000);
       return () => clearInterval(id);
+    },
+
+    /** No server, so this device's clock *is* the shared timebase. */
+    subscribeClockOffset(onOffset) {
+      onOffset(0);
+      return () => {};
     },
   };
 }
