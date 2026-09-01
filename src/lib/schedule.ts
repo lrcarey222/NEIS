@@ -358,6 +358,24 @@ export function presentationRunning(schedule: ScheduleState): boolean {
 }
 
 /**
+ * Which presenter slot is on its feet, or null when nobody is.
+ *
+ * The single source of truth for "somebody is presenting right now", so the
+ * board, the clock and the roster cannot disagree about who. Callers resolve
+ * the slot against `sortedBreakouts(state)` — presenters go in breakout order,
+ * which is also the order the roster is drawn in.
+ */
+export function presentingSlot(
+  schedule: ScheduleState,
+  segment: Segment | null,
+): number | null {
+  if (!segment?.presentationTimer || !presentationRunning(schedule)) return null;
+  const total = presenterCount(segment);
+  if (total > 0 && schedule.presenterIndex >= total) return null;
+  return schedule.presenterIndex;
+}
+
+/**
  * Time left for the presenter currently on their feet. Negative counts up,
  * same as the segment clock — five 2:30 slots only stay hard-timed if going
  * over is visible.

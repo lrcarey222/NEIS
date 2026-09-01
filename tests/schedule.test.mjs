@@ -23,6 +23,7 @@ import {
   pause,
   phaseViews,
   presenterRemainingMs,
+  presentingSlot,
   projectedStarts,
   remainingMs,
   resetDay,
@@ -313,6 +314,34 @@ test("five presenters are tracked in order and the timer counts past zero", () =
   s = nextPresenter(s, segment, T0 + 20 * MIN);
   assert.equal(s.presenterIndex, 5);
   assert.equal(presenterRemainingMs(s, segment, T0 + 20 * MIN), null);
+});
+
+test("presentingSlot is the one answer to who is on their feet", () => {
+  let s = start(schedule(), T0, "sg-presentations");
+  const segment = activeSegment(s);
+
+  // Nobody until the operator clicks, so the board stays on all 25 findings.
+  assert.equal(presentingSlot(s, segment), null, "unarmed");
+
+  s = nextPresenter(s, segment, T0);
+  assert.equal(presentingSlot(s, segment), 0);
+
+  s = nextPresenter(s, segment, T0 + 3 * MIN);
+  assert.equal(presentingSlot(s, segment), 1, "the second room");
+
+  // A held clock is still a room standing at the front of the room.
+  assert.equal(presentingSlot(pause(s, T0 + 4 * MIN), segment), 1, "held, not finished");
+
+  // Past the last presenter the board goes back to the full set.
+  for (let i = 2; i <= 5; i++) s = nextPresenter(s, segment, T0 + i * 3 * MIN);
+  assert.equal(s.presenterIndex, 5);
+  assert.equal(presentingSlot(s, segment), null, "all done");
+
+  // And a segment that is not hard-timed never spotlights, even if stale
+  // presenter state is sitting in the record.
+  const breakouts = activeSegment(start(schedule(), T0, "sg-breakouts"));
+  assert.equal(presentingSlot({ ...s, presenterIndex: 1, presenterStartedAt: T0 }, breakouts), null);
+  assert.equal(presentingSlot(s, null), null);
 });
 
 // --- Wall clock -------------------------------------------------------------

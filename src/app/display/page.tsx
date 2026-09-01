@@ -132,9 +132,10 @@ export default function DisplayPage() {
           auction the screen is genuinely full. */}
       <AgendaStrip state={state} />
 
-      {/* Sits over whatever is behind it — during the presentations that is
-          the presenter's own findings, which the room needs to keep seeing. */}
-      <PresentationOverlay state={state} />
+      {/* The board hands its whole screen to the presenting room and carries
+          the clock itself, so the overlay only steps in when the projector is
+          on some other mode mid-presentation. */}
+      <PresentationOverlay state={state} ownedByMode={mode === "board"} />
 
       <FindingDetail view={detail} onClose={() => setDetail(null)} />
     </main>
