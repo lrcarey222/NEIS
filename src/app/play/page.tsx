@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Logo } from "@/components/Logo";
 import {
@@ -64,15 +64,38 @@ export default function PlayPage() {
     setRestored(true);
   }, [storageKey]);
 
-  function persist(next: AudienceEntry | null) {
-    setEntry(next);
-    try {
-      if (next) localStorage.setItem(storageKey, JSON.stringify(next));
-      else localStorage.removeItem(storageKey);
-    } catch {
-      /* the entry still reaches the database; only resume-on-reload is lost */
-    }
-  }
+  const persist = useCallback(
+    (next: AudienceEntry | null) => {
+      setEntry(next);
+      try {
+        if (next) localStorage.setItem(storageKey, JSON.stringify(next));
+        else localStorage.removeItem(storageKey);
+      } catch {
+        /* the entry still reaches the database; only resume-on-reload is lost */
+      }
+    },
+    [storageKey],
+  );
+
+  /**
+   * Let go of an entry the event no longer has.
+   *
+   * The operator clearing the play-along has to mean it. Without this the entry
+   * survives in localStorage and the next tap re-posts it under the same id, so
+   * a cleared list fills back up from whichever phones happen to still be open
+   * and the operator's "clear" looks like it did nothing.
+   *
+   * The age guard is what keeps this safe: a phone that has just written its
+   * entry may legitimately be a round trip ahead of the snapshot that proves
+   * it, so only an entry old enough to have been echoed back is dropped.
+   */
+  const ECHO_GRACE_MS = 30_000;
+  useEffect(() => {
+    if (!restored || !entry || !state) return;
+    if (state.audience.some((a) => a.id === entry.id)) return;
+    if (Date.now() - (entry.updatedAt ?? 0) < ECHO_GRACE_MS) return;
+    persist(null);
+  }, [restored, entry, state, persist]);
 
   if (status === "connecting" || !restored) {
     return <Centred>Loading…</Centred>;

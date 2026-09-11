@@ -720,7 +720,7 @@ test("audience entries round-trip, and junk allocations are scrubbed on read", (
   assert.equal(entrySpend(entry), 32);
 });
 
-test("a schema 1 event still loads: objectives dropped, five rounds assumed", () => {
+test("a schema 1 event still loads: objectives dropped, rounds read off the picks", () => {
   const state = demo();
   const snapshot = toSnapshot(state);
 
@@ -750,7 +750,11 @@ test("a schema 1 event still loads: objectives dropped, five rounds assumed", ()
 
   const loaded = fromSnapshot(snapshot);
 
-  assert.equal(loaded.event.roundCount, 5, "five objectives meant five picks");
+  assert.equal(
+    loaded.event.roundCount,
+    3,
+    "nobody holds more than one pick, so it opens on today's default",
+  );
   assert.equal(loaded.event.audienceOpen, false);
   assert.equal(loaded.event.audienceBudget, 100);
   assert.deepEqual(loaded.audience, []);
@@ -761,4 +765,43 @@ test("a schema 1 event still loads: objectives dropped, five rounds assumed", ()
   const view = allPanelistViews(loaded).find((v) => v.panelist.id === state.panelists[0].id);
   assert.equal(view.spent, 12, "the old award still counts against its buyer");
   assert.equal(view.slots[0].transaction.price, 12);
+});
+
+test("a legacy event mid-draft keeps every pick somebody already holds", () => {
+  const state = demo();
+  const buyer = state.panelists[0].id;
+
+  // Five picks for one panelist — the schema 1 shape the old flat default of
+  // five existed to protect.
+  const snapshot = toSnapshot(state);
+  snapshot.transactions = {};
+  state.findings.slice(0, 5).forEach((finding, index) => {
+    snapshot.transactions[`tx-${index}`] = {
+      id: `tx-${index}`,
+      findingId: finding.id,
+      panelistId: buyer,
+      price: 5,
+      timestamp: index + 1,
+      note: "",
+    };
+  });
+  delete snapshot.event.roundCount;
+
+  const loaded = fromSnapshot(snapshot);
+
+  assert.equal(loaded.event.roundCount, 5, "floored at the most anyone holds");
+  const view = allPanelistViews(loaded).find((v) => v.panelist.id === buyer);
+  assert.equal(view.filledCount, 5, "no pick is dropped by the lower default");
+  assert.equal(view.openCount, 0);
+});
+
+test("a new event created from a five-round one still gets the default three", () => {
+  // The Setup screen's "New live event" used to carry the current event's round
+  // count across, so one event set to five propagated five into every event
+  // made from it afterwards.
+  const fiveRounds = createEvent({ startingBudget: 100, roundCount: 5 });
+  assert.equal(fiveRounds.event.roundCount, 5);
+
+  const fresh = createEvent({ startingBudget: fiveRounds.event.startingBudget });
+  assert.equal(fresh.event.roundCount, 3);
 });

@@ -1,5 +1,5 @@
 import { emptySchedule } from "./schedule";
-import { createEvent, LEGACY_ROUND_COUNT } from "./seed";
+import { createEvent, roundCountForLegacyEvent } from "./seed";
 import {
   type AudienceEntry,
   type Breakout,
@@ -260,6 +260,9 @@ export function fromSnapshot(raw: unknown): EventState | null {
 
   const defaults = createEvent({ demo: false });
   const event = data.event as Partial<EventState["event"]>;
+  const transactions = toArray<Transaction & { objectiveId?: string }>(
+    data.transactions,
+  );
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -270,10 +273,11 @@ export function fromSnapshot(raw: unknown): EventState | null {
       // as their defaults, not as undefined.
       minBid: event.minBid ?? 1,
       startingBudget: event.startingBudget ?? 100,
-      // Absent on a schema 1 event, which ran five strategic objectives and so
-      // gave every panelist five picks. Not the current default — that would
-      // shrink a portfolio somebody already drafted.
-      roundCount: event.roundCount ?? LEGACY_ROUND_COUNT,
+      // Absent on a schema 1 event, which had no `roundCount` at all. Derived
+      // from what has actually been drafted rather than assumed, so an event
+      // that predates the field but has bought nothing opens on today's
+      // default instead of a stale five. See `roundCountForLegacyEvent`.
+      roundCount: event.roundCount ?? roundCountForLegacyEvent(transactions),
       currentRoundIndex: event.currentRoundIndex ?? -1,
       displayMode: event.displayMode ?? "board",
       status: event.status ?? "setup",
@@ -298,9 +302,7 @@ export function fromSnapshot(raw: unknown): EventState | null {
     // A schema 1 transaction also carried `objectiveId`. There are no
     // objectives any more, so it is read and dropped rather than migrated —
     // the buyer, the price and the order are the whole record now.
-    transactions: toArray<Transaction & { objectiveId?: string }>(
-      data.transactions,
-    ).map((t) => ({
+    transactions: transactions.map((t) => ({
       id: t.id,
       findingId: t.findingId ?? "",
       panelistId: t.panelistId ?? "",
