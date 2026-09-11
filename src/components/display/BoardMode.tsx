@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
 import {
   ConfidenceTag,
@@ -176,13 +176,71 @@ function FullBoard({
 }
 
 /**
- * A finding at board size.
+ * Type sizes a board headline may be set at, largest first.
  *
- * Fifteen of these share the screen instead of twenty-five, and the height that
- * buys goes entirely into the headline — the one thing the room reads from the
- * back — plus why it matters, which is what turns a headline into an argument
- * somebody can bid on. Evidence stays in the detail panel: on a card this size
- * it would push the headline back down to where it started.
+ * Multiples of the display root's em, so the whole ladder scales with the
+ * projector rather than being pinned to pixels.
+ */
+const HEADLINE_SIZES = [1.75, 1.5, 1.375, 1.25, 1.125, 1, 0.9375, 0.875];
+
+/**
+ * Sets a headline as large as will fit its card, by measuring.
+ *
+ * Every card gets the same third of a column, so a single fixed size has to be
+ * chosen for the longest headline any room might write — which leaves the short
+ * ones, usually the sharpest ones, set far smaller than the space allows.
+ *
+ * The obvious alternative is to pick a size off the character count, and that
+ * is what this did first. It does not work: what fills a line is words, not
+ * characters, so two headlines of the same length wrap to different line counts
+ * depending on how long their words are. Calibrated against synthetic strings
+ * it looked fine and then overflowed on the real ones by half a line.
+ *
+ * So measure instead. Step down the ladder until the text fits its box, which
+ * is correct regardless of wrapping, font fallback on the projector, or
+ * viewport — and re-measure when the box changes size.
+ */
+function useFittedHeadline(headline: string) {
+  const textRef = useRef<HTMLHeadingElement | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const text = textRef.current;
+    const box = boxRef.current;
+    if (!text || !box) return;
+
+    const fit = () => {
+      for (const size of HEADLINE_SIZES) {
+        text.style.fontSize = `${size}em`;
+        // The last size is used whether or not it fits: a headline long enough
+        // to beat the smallest step is already beyond saving, and clipping it
+        // is better than pushing the card out of the board.
+        if (text.scrollHeight <= box.clientHeight) return;
+      }
+    };
+
+    fit();
+
+    // Only the box is observed. Re-measuring changes the text's size, not the
+    // box's, so this cannot feed itself.
+    const observer = new ResizeObserver(fit);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [headline]);
+
+  return { textRef, boxRef };
+}
+
+/**
+ * A finding at board size: the headline, and almost nothing else.
+ *
+ * Fifteen of these share the screen instead of twenty-five, and every bit of
+ * the height that buys goes into the headline. Why-it-matters and the evidence
+ * are deliberately not here — they are a paragraph of small text nobody reads
+ * from the back of a room, and on a card this size they pushed the headline
+ * down to a size nobody could read either. Both are one click away in the
+ * detail panel, and the presenting room's own screen still carries them in
+ * full while somebody is speaking to them.
  */
 function BoardCard({
   view,
@@ -192,6 +250,7 @@ function BoardCard({
   onOpen: (view: FindingView) => void;
 }) {
   const { finding, isDrafted, panelist, transaction } = view;
+  const { textRef, boxRef } = useFittedHeadline(finding.headline);
 
   return (
     <li
@@ -207,7 +266,7 @@ function BoardCard({
         className="flex min-h-0 flex-1 flex-col items-start overflow-hidden text-left"
         aria-label={`Open finding: ${finding.headline}`}
       >
-        <div className="mb-[0.45em] flex w-full shrink-0 items-center justify-between gap-[0.5em]">
+        <div className="mb-[0.4em] flex w-full shrink-0 items-center justify-between gap-[0.5em]">
           <TypeChip type={finding.type} size="sm" />
           {isDrafted ? (
             <span className="bg-signal text-ink-900 shrink-0 rounded-sm px-[0.4em] py-[0.1em] font-mono text-[0.5em] font-bold tracking-[0.12em] uppercase">
@@ -218,22 +277,30 @@ function BoardCard({
           )}
         </div>
 
-        <h4
-          className={cx(
-            "text-paper text-[0.9375em] leading-snug font-semibold text-balance",
-            isDrafted && "line-through decoration-paper-faint/50",
-          )}
-        >
-          {finding.headline || (
-            <span className="text-paper-faint italic">Untitled finding</span>
-          )}
-        </h4>
-
-        {finding.whyItMatters ? (
-          <p className="text-paper-mute mt-[0.45em] line-clamp-4 text-[0.75em] leading-snug">
-            {finding.whyItMatters}
-          </p>
-        ) : null}
+        {/* Centred in whatever height is left rather than hanging off the chip
+            row, so a short headline sits in the middle of its card instead of
+            leaving a hole under it. This box is also what the headline is
+            measured against — see `useFittedHeadline`. */}
+        <div ref={boxRef} className="flex min-h-0 w-full flex-1 items-center">
+          <h4
+            ref={textRef}
+            className={cx(
+              // Tighter than `leading-tight`: at this size the default leading
+              // opens gaps that make one headline read as several, and the
+              // line it costs is the one that makes a long headline overflow.
+              //
+              // `break-words` because the fitter measures height: a token too
+              // long to wrap would stay one line, measure as fitting, and run
+              // off the side of the card where nothing would catch it.
+              "text-paper w-full leading-[1.15] font-semibold break-words text-balance",
+              isDrafted && "line-through decoration-paper-faint/50",
+            )}
+          >
+            {finding.headline || (
+              <span className="text-paper-faint text-[1em] italic">Untitled finding</span>
+            )}
+          </h4>
+        </div>
       </button>
 
       {isDrafted && panelist ? (
