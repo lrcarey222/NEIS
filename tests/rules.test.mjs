@@ -9,9 +9,11 @@ import {
   buildAudienceSummary,
   buildSummary,
   entrySpend,
+  maxRounds,
   panelRoles,
   roundComplete,
   roundCount,
+  roundNumbers,
   validateAward,
 } from "../src/lib/derive.ts";
 import { createEvent } from "../src/lib/seed.ts";
@@ -25,6 +27,21 @@ import {
 
 function demo() {
   return createEvent({ demo: true, startingBudget: 100 });
+}
+
+/**
+ * Sets a round count the board can actually supply.
+ *
+ * `roundCount` caps itself at pool ÷ seats, so the five-seat demo cannot run
+ * more than three rounds off fifteen findings. Tests that need deeper
+ * portfolios to exercise the budget arithmetic trim the panel instead of
+ * fighting the cap — which is also what an operator would do.
+ */
+function withRounds(state, rounds) {
+  const seats = Math.floor((state.breakouts.length * AUCTION_RANK_LIMIT) / rounds);
+  state.panelists = state.panelists.slice(0, Math.max(1, seats));
+  state.event.roundCount = rounds;
+  return state;
 }
 
 function firstAvailable(state, skip = 0) {
@@ -231,8 +248,7 @@ test("bids below the minimum are rejected", () => {
 });
 
 test("the budget reserve is a warning by default and an error when enforced", () => {
-  const state = demo();
-  state.event.roundCount = 5;
+  const state = withRounds(demo(), 5);
 
   // 98 of 100 on the first of five picks leaves 2 credits for 4 more.
   const input = {
@@ -252,8 +268,7 @@ test("the budget reserve is a warning by default and an error when enforced", ()
 });
 
 test("maxSafeBid reserves one minimum bid for each remaining pick", () => {
-  const state = demo();
-  state.event.roundCount = 5;
+  const state = withRounds(demo(), 5);
   state.event.minBid = 2;
 
   const view = allPanelistViews(state)[0];
@@ -301,8 +316,7 @@ test("editing a transaction excludes itself from the double-sale and budget chec
 });
 
 test("picks are ordered by when they were won, and pad out to the round count", () => {
-  const state = demo();
-  state.event.roundCount = 4;
+  const state = withRounds(demo(), 4);
   const panelistId = state.panelists[0].id;
 
   const first = firstAvailable(state);
@@ -319,6 +333,58 @@ test("picks are ordered by when they were won, and pad out to the round count", 
     view.slots.map((s) => s.index),
     [1, 2, 3, 4],
   );
+});
+
+test("the round count is capped at what the board can actually supply", () => {
+  const state = demo();
+  // The seeded event: five rooms of three, five seats. Fifteen findings cannot
+  // fill more than three picks each however many rounds the operator sets.
+  assert.equal(state.breakouts.length, 5);
+  assert.equal(state.panelists.length, 5);
+  assert.equal(maxRounds(state), 3);
+
+  state.event.roundCount = 5;
+  assert.equal(roundCount(state), 3, "five rounds would leave ten slots unfillable");
+
+  // Every screen counts slots off roundCount, so the boards follow the cap.
+  for (const view of allPanelistViews(state)) {
+    assert.equal(view.slots.length, 3);
+    assert.equal(view.openCount, 3);
+  }
+  assert.deepEqual(roundNumbers(state), [1, 2, 3]);
+  assert.equal(
+    allPanelistViews(state).reduce((sum, v) => sum + v.slots.length, 0),
+    15,
+    "the slots on screen never outnumber the findings on the board",
+  );
+
+  // The cap moves with the panel rather than being a hard-coded three.
+  state.panelists = state.panelists.slice(0, 3);
+  assert.equal(roundCount(state), 5, "three seats can afford five picks each");
+});
+
+test("the cap never hides a pick a panelist already holds", () => {
+  // An event drafted before the cap existed: five picks on a five-seat panel.
+  const state = demo();
+  const panelistId = state.panelists[0].id;
+  state.event.roundCount = 5;
+  state.findings.slice(0, 5).forEach((finding, index) => {
+    state.transactions.push({
+      id: `tx-${index}`,
+      findingId: finding.id,
+      panelistId,
+      price: 5,
+      timestamp: index + 1,
+      note: "",
+    });
+  });
+
+  assert.equal(roundCount(state), 3, "new bidding is capped");
+
+  const view = allPanelistViews(state).find((v) => v.panelist.id === panelistId);
+  assert.equal(view.slots.length, 5, "but the five they hold still all show");
+  assert.equal(view.filledCount, 5);
+  assert.equal(view.openCount, 0);
 });
 
 test("lowering the round count never discards a pick already made", () => {
