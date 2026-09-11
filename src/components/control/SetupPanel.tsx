@@ -154,12 +154,14 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
   const locked = state.transactions.length > 0;
   const rounds = roundCount(state);
 
-  // Only each room's top three are for sale, so the board is finite in a way it
-  // did not used to be: seats x rounds can now exceed it. Caught here, while it
-  // is a number in a form, rather than in front of the room when the last
-  // panelist has nothing left to bid on.
+  // Only each room's top three are for sale, so the board is finite: seats x
+  // rounds can exceed it. `roundCount` already caps the number every screen
+  // runs on, so this says what was asked for and what is actually happening
+  // rather than asking the operator to work it out.
   const pool = auctionFindings(state).length;
-  const demand = state.panelists.length * rounds;
+  const capacity = state.breakouts.length * AUCTION_RANK_LIMIT;
+  const requested = Math.max(1, Math.floor(state.event.roundCount || 1));
+  const capped = requested > rounds;
 
   return (
     <Card title="Event" hint="Shown across the top of the big screen.">
@@ -202,7 +204,7 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
           label="Rounds"
           type="number"
           value={rounds}
-          hint={`Each panelist ends up holding ${rounds} finding${rounds === 1 ? "" : "s"}, from the ${pool} on the board — each room's top ${AUCTION_RANK_LIMIT}. They may pick any of them, for any reason: their role is the brief, not a rule.`}
+          hint={`Each panelist ends up holding ${rounds} finding${rounds === 1 ? "" : "s"}, from the ${pool} on the board — each room's top ${AUCTION_RANK_LIMIT}. Capped at ${capacity} ÷ ${state.panelists.length || 1} seats, so the picks on screen can always be filled.`}
           onCommit={(value) => void setRoundCount(state, Number(value)).then(notify)}
         />
         <div className="self-end">
@@ -216,13 +218,16 @@ function EventSettings({ state, notify }: { state: EventState; notify: Notify })
         </div>
       </div>
 
-      {pool > 0 && demand > pool ? (
+      {capped ? (
         <div className="mt-4">
           <Notice tone="warn">
-            {state.panelists.length} panelists × {rounds} rounds needs {demand} findings,
-            but only {pool} are on the board — each room&apos;s top {AUCTION_RANK_LIMIT}.
-            Lower the rounds, or the last {demand - pool} pick
-            {demand - pool === 1 ? "" : "s"} will have nothing to bid on.
+            Set to {requested}, running {rounds}.{" "}
+            {state.panelists.length} panelists × {requested} rounds needs{" "}
+            {state.panelists.length * requested} findings, and the board holds{" "}
+            {capacity} — {state.breakouts.length} breakouts × their top{" "}
+            {AUCTION_RANK_LIMIT}. Every screen shows {rounds} picks per panelist, so
+            nobody is left bidding on an empty board. Add a breakout or a finding per
+            room to raise the ceiling.
           </Notice>
         </div>
       ) : null}

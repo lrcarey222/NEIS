@@ -118,13 +118,42 @@ export function transactionsForPanelist(
 // --- Rounds ----------------------------------------------------------------
 
 /**
+ * The most findings each panelist could hold before the board runs out.
+ *
+ * Every seat draws from one pool of `AUCTION_RANK_LIMIT` per breakout, so five
+ * rooms and five panelists is fifteen findings and three picks each. Counted
+ * off the breakouts rather than off what has actually been submitted, because
+ * this has to be a stable number before the rooms report — otherwise the
+ * auction screen would show one slot per panelist during the breakouts and grow
+ * new ones as each room submitted.
+ */
+export function maxRounds(state: EventState): number {
+  const seats = state.panelists.length;
+  const pool = state.breakouts.length * AUCTION_RANK_LIMIT;
+  if (seats === 0 || pool === 0) return Infinity;
+  return Math.max(1, Math.floor(pool / seats));
+}
+
+/**
  * How many findings each panelist ends up holding.
  *
- * Floored at 1: a zero here would make every bid illegal and leave the
- * operator staring at a form that refuses everything with no obvious cause.
+ * Capped at what the board can actually supply. A slot the pool cannot fill is
+ * a promise the auction has to break in front of the room: the projector shows
+ * five open picks per panelist, the fifteenth finding sells, and ten slots sit
+ * there empty for the rest of the session. The configured value is still
+ * honoured whenever it fits, and an event whose rooms or seats change gets a
+ * cap that moves with them.
+ *
+ * This does not shrink anybody's team — `buildPanelistView` keeps every pick
+ * actually made, so an event that drafted five before the cap existed still
+ * shows all five.
+ *
+ * Floored at 1: a zero here would make every bid illegal and leave the operator
+ * staring at a form that refuses everything with no obvious cause.
  */
 export function roundCount(state: EventState): number {
-  return Math.max(1, Math.floor(state.event.roundCount || 1));
+  const configured = Math.max(1, Math.floor(state.event.roundCount || 1));
+  return Math.max(1, Math.min(configured, maxRounds(state)));
 }
 
 /** 1-based round numbers, for the pips across the top of the auction screen. */

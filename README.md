@@ -459,10 +459,19 @@ the ranking decides which three the day actually bids on. The board draws the li
 the facilitator's workspace shows *below the auction line* under #3, and the findings board dims
 what sits under it.
 
-Fifteen is exactly five panelists × three picks, so a full draft empties the board. If you change
-the round count or the number of seats so that seats × rounds exceeds the pool, Setup warns you —
-otherwise the last panelists have nothing left to bid on. `AUCTION_RANK_LIMIT` in
-`src/lib/types.ts` is the single place the three lives.
+Fifteen is exactly five panelists × three picks, so a full draft empties the board.
+
+**The round count caps itself at what the board can supply** — `breakouts × AUCTION_RANK_LIMIT ÷
+panelists`, so five rooms and five seats is three picks each however many rounds are stored on the
+event. A slot the pool cannot fill is a promise the auction has to break in front of the room: the
+projector would show five open picks per panelist, the fifteenth finding would sell, and ten empty
+slots would sit there for the rest of the session. Setup shows the effective number and says so
+when it differs from what was set.
+
+The cap moves with the event rather than being a hard-coded three: add a sixth breakout, or drop
+to three panelists, and it rises. It also never shrinks a team — a panelist who already holds five
+findings keeps showing all five. `AUCTION_RANK_LIMIT` in `src/lib/types.ts` is the single place
+the three lives.
 
 The audience play-along offers the same fifteen, so the closing panel-versus-room comparison is
 over one shared pool.
