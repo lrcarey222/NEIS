@@ -125,8 +125,14 @@ try {
         Array.isArray(await get("/runOfShow/segmentOrder")),
     );
     check(
-      "every panelist carries a role and its question",
-      state.panelists.every((p) => p.role && p.rolePrompt),
+      "every panelist is a name, an affiliation and a budget",
+      state.panelists.every(
+        (p) =>
+          p.name &&
+          typeof p.affiliation === "string" &&
+          p.startingBudget > 0 &&
+          p.role === undefined,
+      ),
     );
     check("no findings yet", state.findings.length === 0);
     check("no audience yet", state.audience.length === 0);
@@ -393,7 +399,6 @@ try {
     // The phone offers the auction pool and nothing else, so the closing
     // comparison is panel and room over the same fifteen findings.
     const board = auctionFindings(before).map((v) => v.finding.id);
-    const roles = [...new Set(before.panelists.map((p) => p.role))].filter(Boolean);
 
     // Every handset writes its own node, all at the same moment. This is the
     // audience equivalent of the five-rooms concurrency check above: nobody
@@ -412,12 +417,9 @@ try {
         put(`/audience/${id}`, {
           id,
           name: `Player ${i}`,
-          affiliation: "",
-          role: roles[i % roles.length] ?? "",
+          affiliation: `Org ${i % 5}`,
           allocations: picks,
-          // Some people wander off without submitting. The period has to be
-          // coprime with the number of roles, or the drop-outs land entirely
-          // on one role and it vanishes from the per-role breakdown.
+          // Some people wander off without submitting.
           submitted: i % 7 !== 0,
           createdAt: Date.now(),
           updatedAt: Date.now(),
@@ -461,7 +463,6 @@ try {
       "panel prices are attached to the audience rows",
       summary.stats.some((stat) => stat.panelPrice !== null),
     );
-    check("the room split across roles", summary.byRole.length === roles.length);
 
     // Clearing the play-along must not touch the auction.
     await del("/audience");

@@ -13,12 +13,7 @@ import {
   cx,
 } from "@/components/primitives";
 import { saveAudienceEntry } from "@/lib/actions";
-import {
-  findingsForBreakout,
-  isAuctionEligible,
-  panelRoles,
-  sortedBreakouts,
-} from "@/lib/derive";
+import { findingsForBreakout, isAuctionEligible, sortedBreakouts } from "@/lib/derive";
 import { eventKey } from "@/lib/firebase-config";
 import { useEvent } from "@/lib/useEvent";
 import {
@@ -183,15 +178,12 @@ function JoinForm({
   state: EventState;
   onJoined: (entry: AudienceEntry) => void;
 }) {
-  const roles = useMemo(() => panelRoles(state), [state]);
   const [name, setName] = useState("");
   const [affiliation, setAffiliation] = useState("");
-  const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const chosen = roles.find((r) => r.name === role) ?? null;
-  const ready = name.trim().length > 0 && role.length > 0;
+  const ready = name.trim().length > 0;
 
   async function join() {
     setBusy(true);
@@ -201,7 +193,6 @@ function JoinForm({
       id: newEntryId(),
       name: name.trim(),
       affiliation: affiliation.trim(),
-      role,
       allocations: {},
       submitted: false,
       createdAt: Date.now(),
@@ -258,55 +249,7 @@ function JoinForm({
             onChange={(event) => setAffiliation(event.target.value)}
           />
         </div>
-
-        <div>
-          <span className="label">Which lens are you drafting through?</span>
-          {roles.length === 0 ? (
-            <Notice tone="warn">
-              The panel&apos;s roles have not been set yet. Try again in a moment.
-            </Notice>
-          ) : (
-            <div className="space-y-2">
-              {roles.map((option) => (
-                <label
-                  key={option.name}
-                  className={cx(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border p-3 transition-colors",
-                    role === option.name
-                      ? "border-signal bg-signal/[0.08]"
-                      : "border-ink-500 hover:border-paper-faint",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="play-role"
-                    className="accent-signal mt-1"
-                    checked={role === option.name}
-                    onChange={() => setRole(option.name)}
-                  />
-                  <span className="min-w-0">
-                    <span className="text-paper block text-sm font-semibold">
-                      {option.name}
-                    </span>
-                    {option.prompt ? (
-                      <span className="text-paper-mute block text-xs leading-relaxed italic">
-                        {option.prompt}
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
-
-      {chosen?.panelists.length ? (
-        <p className="text-paper-faint text-xs">
-          On stage, {chosen.panelists.map((p) => p.name).join(" and ")} is drafting against
-          the same question.
-        </p>
-      ) : null}
 
       <button
         type="button"
@@ -407,7 +350,6 @@ function Allocator({
   const spent = Object.values(allocations).reduce((sum, value) => sum + value, 0);
   const remaining = budget - spent;
   const backed = Object.values(allocations).filter((value) => value > 0).length;
-  const role = panelRoles(state).find((r) => r.name === entry.role);
 
   /**
    * Change one finding's allocation.
@@ -475,7 +417,9 @@ function Allocator({
             <div className="min-w-0">
               <p className="text-paper-faint truncate font-mono text-[0.625rem] tracking-[0.12em] uppercase">
                 {entry.name}
-                {entry.role ? <span className="text-signal"> · {entry.role}</span> : null}
+                {entry.affiliation ? (
+                  <span className="text-paper-mute"> · {entry.affiliation}</span>
+                ) : null}
               </p>
               <p className="text-paper-mute mt-0.5 text-xs">
                 {backed} finding{backed === 1 ? "" : "s"} backed
@@ -503,12 +447,6 @@ function Allocator({
           </div>
         </div>
       </div>
-
-      {role?.prompt ? (
-        <p className="text-paper-mute text-sm leading-relaxed italic">
-          &ldquo;{role.prompt}&rdquo;
-        </p>
-      ) : null}
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="text-paper-faint font-mono text-[0.625rem] tracking-[0.12em] uppercase">

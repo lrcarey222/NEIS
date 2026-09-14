@@ -20,8 +20,8 @@ import type { EventState } from "@/lib/types";
  * moderator uses to close the session: what the room paid most for, which
  * breakouts got drafted, and what nobody wanted.
  *
- * Each card leads with the role and its question, because a free-form draft is
- * only judgeable against what the panelist was trying to build.
+ * Each card leads with who drafted it — name and affiliation — and then gets
+ * out of the way: the picks are the argument.
  */
 export function PortfoliosMode({
   state,
@@ -241,15 +241,8 @@ function PortfolioCard({
             <h3 className="text-paper truncate text-[1em] leading-tight font-semibold">
               {view.panelist.name}
             </h3>
-            {view.panelist.role ? (
-              <p className="text-signal mt-[0.15em] truncate font-mono text-[0.625em] font-semibold tracking-[0.1em] uppercase">
-                {view.panelist.role}
-                {view.panelist.affiliation ? (
-                  <span className="text-paper-faint"> · {view.panelist.affiliation}</span>
-                ) : null}
-              </p>
-            ) : view.panelist.affiliation ? (
-              <p className="text-paper-faint truncate text-[0.6875em]">
+            {view.panelist.affiliation ? (
+              <p className="text-paper-faint mt-[0.15em] truncate text-[0.6875em]">
                 {view.panelist.affiliation}
               </p>
             ) : null}
@@ -260,13 +253,6 @@ function PortfolioCard({
             </span>
           ) : null}
         </div>
-
-        {/* The brief this portfolio should be judged against. */}
-        {view.panelist.rolePrompt ? (
-          <p className="text-paper-mute mt-[0.4em] line-clamp-3 text-[0.625em] leading-snug italic">
-            {view.panelist.rolePrompt}
-          </p>
-        ) : null}
 
         <dl className="mt-[0.6em] grid grid-cols-3 gap-[0.4em]">
           <Stat label="Spent" value={view.spent} />

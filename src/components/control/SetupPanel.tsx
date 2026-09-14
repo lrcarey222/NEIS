@@ -27,12 +27,7 @@ import {
 } from "@/lib/derive";
 import { adminPin } from "@/lib/localAuth";
 import { currentMode } from "@/lib/net";
-import {
-  AUCTION_RANK_LIMIT,
-  DEFAULT_ROLES,
-  defaultPromptForRole,
-  type EventState,
-} from "@/lib/types";
+import { AUCTION_RANK_LIMIT, type EventState } from "@/lib/types";
 
 /** Pre-event configuration, plus the reset/demo tools used for rehearsal. */
 export function SetupPanel({ state }: { state: EventState }) {
@@ -112,7 +107,6 @@ function LiveField({
   disabled,
   hint,
   placeholder,
-  list,
 }: {
   label: string;
   value: string | number;
@@ -121,8 +115,6 @@ function LiveField({
   disabled?: boolean;
   hint?: string;
   placeholder?: string;
-  /** id of a <datalist>, for a typed field with suggestions. */
-  list?: string;
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
@@ -136,7 +128,6 @@ function LiveField({
         value={draft}
         disabled={disabled}
         placeholder={placeholder}
-        list={list}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => {
           if (draft !== String(value)) onCommit(draft);
@@ -280,45 +271,23 @@ function Toggle({
 }
 
 /**
- * The panel, and the lens each seat drafts through.
+ * The panel: a name, an affiliation and a budget per seat.
  *
- * Role and prompt are both free text — the panel is whoever turns up — but
- * typing a role that matches one of the defaults fills in its question, so the
- * common case is one field and a tab.
+ * Nothing else is recorded about a panelist. Whatever lens they are arguing
+ * from is theirs to state at the microphone, not the app's to caption.
  */
 function PanelistSettings({ state, notify }: { state: EventState; notify: Notify }) {
   const panelists = sortedPanelists(state);
-  const missingPrompt = panelists.filter((p) => p.role.trim() && !p.rolePrompt.trim());
-
-  /** Commits the role, and its default question when there is nothing there. */
-  async function commitRole(id: string, role: string) {
-    const panelist = state.panelists.find((p) => p.id === id);
-    const suggested = defaultPromptForRole(role);
-    const fillPrompt = suggested && !panelist?.rolePrompt.trim();
-    notify(
-      await patchPanelist(state, id, {
-        role,
-        ...(fillPrompt ? { rolePrompt: suggested } : {}),
-      }),
-    );
-  }
 
   return (
     <Card
       title="Panelists"
-      hint="Each starts with the event budget unless overridden. The role is the question they are answering, and the big screen projects it beside their picks."
+      hint="Name and affiliation are what the big screen shows. Each starts with the event budget unless overridden."
     >
-      {/* Suggestions rather than a fixed list: the field stays typed. */}
-      <datalist id="role-suggestions">
-        {DEFAULT_ROLES.map((role) => (
-          <option key={role.name} value={role.name} />
-        ))}
-      </datalist>
-
-      <ul className="space-y-5">
+      <ul className="space-y-3">
         {panelists.map((panelist) => (
           <li key={panelist.id} className="border-ink-500 rounded-sm border p-3">
-            <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_9rem_6rem_auto]">
+            <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_6rem_auto]">
               <LiveField
                 label="Name"
                 value={panelist.name}
@@ -327,18 +296,11 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
                 }
               />
               <LiveField
-                label="Affiliation (optional)"
+                label="Affiliation"
                 value={panelist.affiliation}
                 onCommit={(affiliation) =>
                   void patchPanelist(state, panelist.id, { affiliation }).then(notify)
                 }
-              />
-              <LiveField
-                label="Role"
-                value={panelist.role}
-                list="role-suggestions"
-                placeholder="Governor"
-                onCommit={(role) => void commitRole(panelist.id, role)}
               />
               <LiveField
                 label="Budget"
@@ -358,32 +320,9 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
                 Remove
               </button>
             </div>
-
-            <div className="mt-3">
-              <LiveField
-                label="Action prompt — the question this role is answering"
-                value={panelist.rolePrompt}
-                placeholder={
-                  defaultPromptForRole(panelist.role) ??
-                  "What is this panelist trying to build with the findings they pick?"
-                }
-                onCommit={(rolePrompt) =>
-                  void patchPanelist(state, panelist.id, { rolePrompt }).then(notify)
-                }
-              />
-            </div>
           </li>
         ))}
       </ul>
-
-      {missingPrompt.length > 0 ? (
-        <div className="mt-4">
-          <Notice tone="warn">
-            {missingPrompt.map((p) => p.name).join(", ")} — role set, no action prompt. The
-            big screen will show the role on its own.
-          </Notice>
-        </div>
-      ) : null}
 
       <button
         type="button"
@@ -399,14 +338,13 @@ function PanelistSettings({ state, notify }: { state: EventState; notify: Notify
 /**
  * The play-along.
  *
- * Opening it puts a QR code on the auction screen; the room joins at /play,
- * picks one of the panel's roles, and allocates its own budget across the
- * board. Closing it stops new entries without touching the ones already in.
+ * Opening it puts a QR code on the auction screen; the room joins at /play and
+ * allocates its own budget across the board. Closing it stops new entries
+ * without touching the ones already in.
  */
 function AudienceSettings({ state, notify }: { state: EventState; notify: Notify }) {
   const joined = state.audience.length;
   const submitted = state.audience.filter((entry) => entry.submitted).length;
-  const roles = sortedPanelists(state).filter((p) => p.role.trim()).length;
 
   return (
     <Card
@@ -438,15 +376,6 @@ function AudienceSettings({ state, notify }: { state: EventState; notify: Notify
           }
         />
       </div>
-
-      {roles === 0 ? (
-        <div className="mt-4">
-          <Notice tone="warn">
-            No panelist has a role yet, so the audience has nothing to pick from. Set the
-            roles above before opening this.
-          </Notice>
-        </div>
-      ) : null}
 
       {state.event.audienceOpen ? (
         <div className="mt-4">

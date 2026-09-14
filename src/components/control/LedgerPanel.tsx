@@ -128,8 +128,6 @@ export function LedgerPanel({ state }: { state: EventState }) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <p className="text-paper-faint font-mono text-[0.625rem] tracking-[0.1em] uppercase">
-                        {panelists.get(transaction.panelistId)?.role || "no role"}
-                        {" · "}
                         {finding ? breakouts.get(finding.breakoutId)?.shortName : "—"}
                       </p>
                       <p className="text-paper mt-1 text-sm leading-snug font-medium">
@@ -219,7 +217,7 @@ function EditTransaction({
             {sortedPanelists(state).map((panelist) => (
               <option key={panelist.id} value={panelist.id}>
                 {panelist.name}
-                {panelist.role ? ` — ${panelist.role}` : ""}
+                {panelist.affiliation ? ` — ${panelist.affiliation}` : ""}
               </option>
             ))}
           </select>

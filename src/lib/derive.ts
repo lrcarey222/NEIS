@@ -286,40 +286,6 @@ export function allPanelistViews(state: EventState): PanelistView[] {
   return sortedPanelists(state).map((p) => buildPanelistView(state, p));
 }
 
-// --- Roles -----------------------------------------------------------------
-
-export interface RoleView {
-  name: string;
-  prompt: string;
-  panelists: Panelist[];
-}
-
-/**
- * The distinct roles on the panel, in seat order.
- *
- * This is the list the audience picks from at /play: the room drafts against
- * the same briefs as the stage, which is what makes the closing comparison
- * mean anything. Two panelists sharing a role collapse into one entry, and the
- * first non-empty prompt wins.
- */
-export function panelRoles(state: EventState): RoleView[] {
-  const roles: RoleView[] = [];
-  for (const panelist of sortedPanelists(state)) {
-    const name = panelist.role.trim();
-    if (!name) continue;
-    const existing = roles.find(
-      (r) => r.name.toLowerCase() === name.toLowerCase(),
-    );
-    if (existing) {
-      existing.panelists.push(panelist);
-      if (!existing.prompt) existing.prompt = panelist.rolePrompt.trim();
-    } else {
-      roles.push({ name, prompt: panelist.rolePrompt.trim(), panelists: [panelist] });
-    }
-  }
-  return roles;
-}
-
 // --- Award validation ------------------------------------------------------
 
 export interface AwardInput {
@@ -353,8 +319,8 @@ export interface AwardValidation {
  * the operator turns on `enforceBudgetReserve`.
  *
  * Note what is deliberately *not* a rule: nothing constrains which findings a
- * panelist may combine. Judging that portfolio against their role is the
- * exercise, and the app must not pre-empt it.
+ * panelist may combine. Judging the portfolio they built is the exercise, and
+ * the app must not pre-empt it.
  */
 export function validateAward(
   state: EventState,
@@ -503,8 +469,6 @@ export interface AudienceSummary {
   overlooked: AudienceStat[];
   /** The panel paid well above what the room would have. */
   contested: AudienceStat[];
-  /** Top pick per role, so the closing screen can show how the lenses differed. */
-  byRole: { role: string; entries: number; top: AudienceStat[] }[];
 }
 
 /**
@@ -521,10 +485,10 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
 
   const creditsAllocated = entries.reduce((sum, entry) => sum + entrySpend(entry), 0);
 
-  const statFor = (finding: Finding, pool: AudienceEntry[]): AudienceStat => {
+  const statFor = (finding: Finding): AudienceStat => {
     let total = 0;
     let backers = 0;
-    for (const entry of pool) {
+    for (const entry of entries) {
       const value = Number(entry.allocations?.[finding.id]) || 0;
       if (value > 0) {
         total += value;
@@ -532,7 +496,7 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
       }
     }
     const transaction = transactionForFinding(state, finding.id);
-    const average = total / Math.max(1, pool.length);
+    const average = total / Math.max(1, entries.length);
     return {
       finding,
       breakout: breakouts.get(finding.breakoutId) ?? null,
@@ -549,9 +513,9 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
   // The pool, not everything submitted: the room allocated across the same
   // fifteen the panel bid on, so an average over twenty-five would divide the
   // audience's credits by findings they were never offered.
-  const poolFindings = state.findings.filter(isAuctionEligible);
-  const stats = poolFindings
-    .map((finding) => statFor(finding, entries))
+  const stats = state.findings
+    .filter(isAuctionEligible)
+    .map(statFor)
     .sort((a, b) => b.average - a.average || b.backers - a.backers);
 
   // Only meaningful once somebody has actually played.
@@ -564,21 +528,6 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
     .filter((s) => s.panelPrice !== null && s.delta < 0)
     .sort((a, b) => a.delta - b.delta);
 
-  const roleNames = [...new Set(entries.map((e) => e.role.trim()).filter(Boolean))];
-  const byRole = roleNames
-    .map((role) => {
-      const pool = entries.filter(
-        (e) => e.role.trim().toLowerCase() === role.toLowerCase(),
-      );
-      const top = poolFindings
-        .map((finding) => statFor(finding, pool))
-        .filter((s) => s.total > 0)
-        .sort((a, b) => b.average - a.average)
-        .slice(0, 3);
-      return { role, entries: pool.length, top };
-    })
-    .sort((a, b) => b.entries - a.entries);
-
   return {
     joined: state.audience.length,
     submitted: entries.length,
@@ -586,7 +535,6 @@ export function buildAudienceSummary(state: EventState): AudienceSummary {
     stats,
     overlooked,
     contested,
-    byRole,
   };
 }
 

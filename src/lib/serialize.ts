@@ -140,7 +140,6 @@ function normaliseAudience(entry: Partial<AudienceEntry>, id: string): AudienceE
     id: entry.id ?? id,
     name: entry.name ?? "",
     affiliation: entry.affiliation ?? "",
-    role: entry.role ?? "",
     allocations,
     submitted: entry.submitted ?? false,
     createdAt: entry.createdAt ?? 0,
@@ -291,11 +290,13 @@ export function fromSnapshot(raw: unknown): EventState | null {
     },
     breakouts: toArray<Breakout>(data.breakouts).map((b) => normaliseBreakout(b, b.id)),
     findings: toArray<Finding>(data.findings).map((f) => normaliseFinding(f, f.id)),
+    // A schema 3 panelist also carried `role` and `rolePrompt`. Listed field by
+    // field rather than spread, so those two are read and dropped instead of
+    // riding along in the object and being written back on the next save.
     panelists: toArray<Panelist>(data.panelists).map((p) => ({
-      ...p,
+      id: p.id,
+      name: p.name ?? "",
       affiliation: p.affiliation ?? "",
-      role: p.role ?? "",
-      rolePrompt: p.rolePrompt ?? "",
       startingBudget: p.startingBudget ?? 100,
       sortOrder: p.sortOrder ?? 0,
     })),

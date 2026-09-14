@@ -15,18 +15,18 @@ import { FINDING_TYPE_META, type EventState } from "@/lib/types";
  * watching. The room spent its own credits privately, at the same time, on the
  * same board. This puts the two side by side, and does nothing else: one list,
  * one row per finding, ranked by the room. The moderator is talking over this
- * screen, and a screen with three panels and a role strip on it was competing
- * with them for the room's attention instead of holding a single argument up.
+ * screen, and a screen with three panels of statistics on it was competing with
+ * them for the room's attention instead of holding a single argument up.
  *
  * The comparison only works because both numbers mean the same thing: a panel
  * price is what one participant paid for one finding, and the audience figure
  * is credits-per-participant, counting the people who gave a finding nothing.
  * Averaging over backers instead would let two enthusiasts outrank the room.
  *
- * The cuts that used to sit beside this — biggest gap each way, top pick per
- * role — are still computed in `buildAudienceSummary` and still exported to the
- * CSV and the printable summary, which is where a number you want to read twice
- * belongs anyway.
+ * The cuts that used to sit beside this — the biggest gap each way — are still
+ * computed in `buildAudienceSummary` and still exported to the CSV and the
+ * printable summary, which is where a number you want to read twice belongs
+ * anyway.
  */
 export function AudienceMode({ state }: { state: EventState }) {
   const summary = useMemo(() => buildAudienceSummary(state), [state]);
@@ -43,7 +43,7 @@ export function AudienceMode({ state }: { state: EventState }) {
             Draft your own portfolio
           </h2>
           <p className="text-paper-mute mx-auto mt-[0.6em] max-w-[30em] text-[1em] leading-snug">
-            Scan the code, pick the role you want to think like, and spend{" "}
+            Scan the code and spend{" "}
             <span className="text-paper-dim font-semibold">
               {state.event.audienceBudget} credits
             </span>{" "}

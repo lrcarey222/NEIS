@@ -67,8 +67,8 @@ export default function LandingPage() {
         </div>
         <p className="text-paper-mute mt-3 max-w-2xl leading-relaxed">
           Five breakouts each record five Strategic Findings. A panel of experts then bids
-          for them — each drafting the strongest set for the question their role is
-          answering. Scan your room&apos;s code to open its workspace.
+          for them — each drafting the strongest set they can from a fixed budget. Scan
+          your room&apos;s code to open its workspace.
         </p>
       </header>
 

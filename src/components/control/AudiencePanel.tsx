@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { QrCode } from "@/components/QrCode";
-import { Notice, RoleChip, cx } from "@/components/primitives";
+import { Notice, cx } from "@/components/primitives";
 import { deleteAudienceEntry, setAudienceOpen } from "@/lib/actions";
 import { buildAudienceSummary, byId, entrySpend } from "@/lib/derive";
 import { useSiteUrl } from "@/lib/useSiteUrl";
@@ -159,7 +159,6 @@ export function AudiencePanel({ state }: { state: EventState }) {
                         <span className="text-paper truncate text-sm font-medium">
                           {entry.name || "(no name)"}
                         </span>
-                        <RoleChip role={entry.role} />
                         {!entry.submitted ? (
                           <span className="text-paper-faint border-ink-400 rounded-sm border px-1.5 py-0.5 font-mono text-[0.5625rem] tracking-[0.1em] uppercase">
                             drafting
