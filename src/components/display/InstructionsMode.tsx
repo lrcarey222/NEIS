@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { QrCode } from "@/components/QrCode";
 import { cx } from "@/components/primitives";
-import { panelRoles, roundCount, sortedBreakouts } from "@/lib/derive";
+import { roundCount, sortedBreakouts, sortedPanelists } from "@/lib/derive";
 import { segmentIndex } from "@/lib/schedule";
 import { useSiteUrl } from "@/lib/useSiteUrl";
 import { AUCTION_RANK_LIMIT, FINDING_TYPES, FINDING_TYPE_META } from "@/lib/types";
@@ -26,7 +26,7 @@ import type { EventState } from "@/lib/types";
  */
 export function InstructionsMode({ state }: { state: EventState }) {
   const breakouts = useMemo(() => sortedBreakouts(state), [state]);
-  const roles = useMemo(() => panelRoles(state), [state]);
+  const panelists = useMemo(() => sortedPanelists(state), [state]);
   const rounds = roundCount(state);
   const site = useSiteUrl();
 
@@ -105,24 +105,24 @@ export function InstructionsMode({ state }: { state: EventState }) {
               {state.event.startingBudget} credits
             </span>{" "}
             each over {rounds} rounds. Any finding, for any reason — each panelist is
-            building the strongest set for one question:
+            building the strongest set they can, and then defending it:
           </p>
-          {roles.length ? (
+          {panelists.length ? (
             <ul className="mt-[0.4em] space-y-[0.25em]">
-              {roles.map((role) => (
-                <li key={role.name} className="flex items-baseline gap-[0.5em]">
-                  <span className="text-signal w-[7em] shrink-0 font-mono text-[0.625em] font-semibold tracking-[0.08em] uppercase">
-                    {role.name}
+              {panelists.map((panelist) => (
+                <li key={panelist.id} className="flex items-baseline gap-[0.5em]">
+                  <span className="text-paper w-[8em] shrink-0 truncate text-[0.75em] leading-snug font-semibold">
+                    {panelist.name}
                   </span>
-                  <span className="text-paper-mute line-clamp-2 text-[0.6875em] leading-snug italic">
-                    {role.prompt || "—"}
+                  <span className="text-paper-mute truncate text-[0.6875em] leading-snug">
+                    {panelist.affiliation || "—"}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-paper-faint mt-[0.4em] text-[0.75em]">
-              Panelist roles are set on the control screen.
+              The panel is set on the control screen.
             </p>
           )}
 

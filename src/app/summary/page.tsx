@@ -92,17 +92,6 @@ export default function SummaryPage() {
                 </p>
               </header>
 
-              {/* The brief this portfolio was drafted against. Without it the
-                  table below is just a list of findings. */}
-              {view.panelist.role ? (
-                <p className="mb-2 text-sm text-[#444]">
-                  <span className="font-semibold">{view.panelist.role}</span>
-                  {view.panelist.rolePrompt ? (
-                    <span className="italic"> — {view.panelist.rolePrompt}</span>
-                  ) : null}
-                </p>
-              ) : null}
-
               <table className="w-full border-collapse text-sm">
                 <tbody>
                   {view.slots.map((slot) => (
@@ -153,7 +142,7 @@ export default function SummaryPage() {
                   <span className="font-medium">{view.finding.headline}</span>
                   <span className="block text-xs text-[#666]">
                     {view.breakout?.name} · {view.panelist?.name}
-                    {view.panelist?.role ? ` (${view.panelist.role})` : ""}
+                    {view.panelist?.affiliation ? ` (${view.panelist.affiliation})` : ""}
                   </span>
                 </span>
                 <span className="w-12 shrink-0 text-right font-mono font-bold">

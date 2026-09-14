@@ -620,8 +620,6 @@ export async function createPanelist(state: EventState): Promise<Result> {
     id: newId("pl"),
     name: `Panelist ${state.panelists.length + 1}`,
     affiliation: "",
-    role: "",
-    rolePrompt: "",
     startingBudget: state.event.startingBudget,
     sortOrder: state.panelists.length,
   };
@@ -632,10 +630,7 @@ export async function patchPanelist(
   state: EventState,
   id: string,
   patch: Partial<
-    Pick<
-      Panelist,
-      "name" | "affiliation" | "role" | "rolePrompt" | "startingBudget" | "sortOrder"
-    >
+    Pick<Panelist, "name" | "affiliation" | "startingBudget" | "sortOrder">
   >,
 ): Promise<Result> {
   const panelist = state.panelists.find((p) => p.id === id);
@@ -861,7 +856,6 @@ export async function saveAudienceEntry(entry: AudienceEntry): Promise<Result> {
     ...entry,
     name: entry.name.trim(),
     affiliation: entry.affiliation.trim(),
-    role: entry.role.trim(),
     // RTDB deletes keys whose value is null and drops an empty object, so a
     // cleared allocation has to leave as an absent key rather than a zero.
     allocations: Object.fromEntries(

@@ -7,8 +7,8 @@ A live-event web app for the NEIS session at NYC Climate Week.
 Five breakout groups each record five Strategic Findings **at the same time, from their own
 laptops**. Every finding lands on a shared board the moment it is submitted. A panel of experts
 then bids fictional investment credits for them — each panelist drafting the strongest set of
-findings for the question their **role** is answering. The audience plays the same game from
-their phones, and the closing screen puts the two side by side.
+findings they can from a fixed budget. The audience plays the same game from their phones,
+and the closing screen puts the two side by side.
 
 The bidding happens **verbally in the room** — this app captures the findings, projects the
 board, and lets an operator record each result so every screen updates instantly.
@@ -43,27 +43,15 @@ rather than in a Word document nobody in the room can see.
 
 - Event title and subtitle (shown across the top of the big screen)
 - The number of **rounds** — how many findings each panelist ends up holding (default 3)
-- The real **panelist names**, their **roles**, and the starting budget (default 5 seats,
-  100 credits each)
-- Each role's **action prompt** — the question that panelist is answering, projected beside
-  their picks. Typing one of the built-in role names fills its prompt in for you.
+- The real **panelist names**, their **affiliations**, and the starting budget (default 5
+  seats, 100 credits each)
 - Whether to run the **audience play-along**, and the credits each person gets
 - Rename breakouts if needed, and **set a PIN per room**
 
-The five built-in roles and the question each one is answering. Custom roles and prompts
-work exactly the same way — these are only the defaults a new event arrives with.
-
-| Role | Action prompt |
-| --- | --- |
-| **National Security Advisor** | Which findings most reduce exposure to coercion, disruption, or untrusted supply? |
-| **Treasury Secretary** | Which findings most improve productivity, market share, and the ability to compete without indefinite protection? |
-| **Governor** | Which findings most determine whether this agenda delivers visible benefits and survives a change of administration? |
-| **Utility CEO** | Which findings most affect reliable, abundant, predictably priced power for households and strategic industry? |
-| **National Lab Director** | Which findings most affect durable emissions reductions, deployment speed, learning, and technology diffusion? |
-
-> **There are no strategic objectives.** A panelist may buy any finding for any reason. What
-> makes a portfolio judgeable is the role it was drafted for, which is why the prompt is on
-> screen next to every set of picks.
+> **A panelist is a name and an affiliation.** That is the whole record. There are no
+> strategic objectives and no assigned roles: a panelist may buy any finding for any reason,
+> and why they bought it is theirs to say at the microphone rather than the projector's to
+> caption.
 
 **Create the live event** — Setup → **Event lifecycle**:
 
@@ -84,12 +72,12 @@ what is actually happening. See [Running the day](#running-the-day).
 ## 1a. Briefing the room
 
 The **Instructions** screen is the projected briefing, in three steps: the five finding
-types, what submitting does, and the roles the panel will draft through. Under them sits
-**the whole run of show**, at a size the back of the room can read. Leave it up while
-people find their tables and while the moderator explains the exercise.
+types, what submitting does, and who is on the panel. Under them sits **the whole run of
+show**, at a size the back of the room can read. Leave it up while people find their tables
+and while the moderator explains the exercise.
 
-It reads the live event, so renamed breakouts, edited roles and an edited agenda appear on
-it immediately.
+It reads the live event, so renamed breakouts, an edited panel and an edited agenda appear
+on it immediately.
 
 > **It no longer carries the breakout QR codes or room PINs.** Those are on the table
 > cards, in front of the person who needs them; on the projector they took two thirds of a
@@ -256,7 +244,8 @@ grouped on screen by room pick #1, #2, #3 rather than run as one long list. See
 On the **Auction** tab:
 
 1. Filter and click the **finding** the room just bid on
-2. Click the winning **panelist** — each button shows their role, picks so far, and credits left
+2. Click the winning **panelist** — each button shows their affiliation, picks so far, and
+   credits left
 3. Type the **winning bid** — validation updates as you type
 4. **AWARD FINDING** → confirm the summary sentence → done
 
@@ -278,9 +267,8 @@ Open it from **Setup → Audience play-along** (or the **Audience** tab). A QR c
 the right-hand column of the **Live Auction** screen for as long as it stays open, with a live
 count of how many people have submitted.
 
-Each person scans it, enters their name, picks one of the panel's **roles**, and spends their own
-credits across the same fifteen the panel is bidding on — the same exercise, from the same brief,
-at the same time.
+Each person scans it, enters their name and organisation, and spends their own credits across
+the same fifteen the panel is bidding on — the same exercise, at the same time.
 
 Fifteen findings do not fit on a phone as a list, so they arrive folded into **collapsible
 groups**, one open at a time. A *Group by* switch offers two cuts: **Session**, which is how the
@@ -302,7 +290,7 @@ Switch to **Final Portfolios**. This mode is **two screens**, and a *Show summar
 appears next to the mode buttons to flip between them:
 
 1. **The roster** — every panelist's picks with source breakout, finding type and price, plus
-   their role and its question, total spent, credits remaining, and their breakout spread
+   total spent, credits remaining, and their breakout spread
 2. **The summary cuts** — findings submitted and acquired, credits committed, average price,
    then highest-valued findings, most-represented breakouts, and what went undrafted
 
@@ -312,9 +300,9 @@ track with the room's average as the bar and the panel's price as a marker on it
 disagreement is the distance between the two marks, and the moderator is talking over this
 screen rather than reading it aloud.
 
-The finer cuts it used to show alongside — biggest gap each way, top pick per role — are
-still computed and still in the **Findings CSV** and the **printable summary**, which is
-where a number worth reading twice belongs.
+The finer cuts it used to show alongside — the biggest gap each way — are still computed and
+still in the **Findings CSV** and the **printable summary**, which is where a number worth
+reading twice belongs.
 
 > **Why the audience figure is an average over everyone.** It divides by every submitted
 > portfolio, including the people who put nothing on that finding — which is exactly what a panel
@@ -484,8 +472,8 @@ over one shared pool.
 - Bids must be whole numbers, at or above the minimum bid
 
 **Deliberately not a rule:** nothing constrains *which* findings a panelist may combine. A whole
-room's three, or three Wildcards, is a legitimate portfolio. Judging it against the panelist's
-role is the exercise, and the app must not pre-empt that.
+room's three, or three Wildcards, is a legitimate portfolio. Judging the portfolio is the
+exercise, and the app must not pre-empt that.
 
 **Advisory by default:**
 
@@ -693,8 +681,8 @@ npm test
 `tests/rules.test.mjs` covers the rule engine and the audience arithmetic: budget maths,
 double-sale and full-team rejection, minimum bid, the reserve rule in both modes, undo
 restoring state exactly, editing a transaction excluding itself from its own checks, both a
-five-round and a 3-round/5-panelist draft reconciling to correct totals, the role roster,
-audience averages dividing by everyone rather than by backers, the room-versus-panel gap,
+five-round and a 3-round/5-panelist draft reconciling to correct totals, the shape of a
+panelist, audience averages dividing by everyone rather than by backers, the room-versus-panel gap,
 the demo findings sitting inside their own length targets, the `whatChanged` → `whyItMatters`
 migration losing nothing and being idempotent, and a schema 1 event still loading.
 

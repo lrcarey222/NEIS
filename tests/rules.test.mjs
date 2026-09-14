@@ -10,7 +10,6 @@ import {
   buildSummary,
   entrySpend,
   maxRounds,
-  panelRoles,
   roundComplete,
   roundCount,
   roundNumbers,
@@ -68,12 +67,11 @@ function award(state, { findingId, panelistId, price }) {
 }
 
 /** Adds a submitted audience entry. `picks` is findingId -> credits. */
-function play(state, { name, role, picks, submitted = true }) {
+function play(state, { name, picks, submitted = true }) {
   const entry = {
     id: `au-${state.audience.length + 1}`,
     name,
     affiliation: "",
-    role,
     allocations: picks,
     submitted,
     createdAt: state.audience.length + 1,
@@ -535,43 +533,31 @@ test("a 2-round, 5-panelist draft reconciles and leaves the rest on the board", 
   assert.equal(summary.totalBudget, 500);
 });
 
-// --- Roles ------------------------------------------------------------------
+// --- The panel ---------------------------------------------------------------
 
-test("the panel seeds one seat per default role, each with its question", () => {
+test("a seat carries a name, an affiliation and a budget, and nothing else", () => {
   const state = createEvent({});
-  const roles = panelRoles(state);
+
+  assert.equal(state.panelists.length, 5);
+  for (const panelist of state.panelists) {
+    assert.deepEqual(Object.keys(panelist).sort(), [
+      "affiliation",
+      "id",
+      "name",
+      "sortOrder",
+      "startingBudget",
+    ]);
+  }
+});
+
+test("named panelists keep their names and start with blank affiliations", () => {
+  const state = createEvent({ panelistNames: ["Ada", "Grace"] });
 
   assert.deepEqual(
-    roles.map((r) => r.name),
-    [
-      "National Security Advisor",
-      "Treasury Secretary",
-      "Governor",
-      "Utility CEO",
-      "National Lab Director",
-    ],
+    state.panelists.map((p) => p.name),
+    ["Ada", "Grace"],
   );
-  assert.ok(roles.every((r) => r.prompt.length > 0), "every seeded role has a prompt");
-});
-
-test("two panelists sharing a role collapse to one entry for the audience", () => {
-  const state = createEvent({});
-  const shared = state.panelists[0].role;
-  state.panelists[1].role = shared;
-  state.panelists[1].rolePrompt = "";
-
-  const roles = panelRoles(state);
-  assert.equal(roles.filter((r) => r.name === shared).length, 1);
-  const merged = roles.find((r) => r.name === shared);
-  assert.equal(merged.panelists.length, 2);
-  assert.ok(merged.prompt.length > 0, "the first non-empty prompt wins");
-});
-
-test("a panelist with no role is left out of the audience's choices", () => {
-  const state = createEvent({});
-  state.panelists[0].role = "   ";
-
-  assert.equal(panelRoles(state).length, 4);
+  assert.ok(state.panelists.every((p) => p.affiliation === ""));
 });
 
 // --- Audience play-along -----------------------------------------------------
@@ -581,10 +567,10 @@ test("audience averages divide by everyone who submitted, not by backers", () =>
   const [a, b] = state.findings.filter((f) => f.submitted);
 
   // One zealot puts everything on `a`; three others put a little on `b`.
-  play(state, { name: "Zealot", role: "Investor", picks: { [a.id]: 100 } });
-  play(state, { name: "One", role: "Economist", picks: { [b.id]: 20 } });
-  play(state, { name: "Two", role: "Economist", picks: { [b.id]: 20 } });
-  play(state, { name: "Three", role: "Economist", picks: { [b.id]: 20 } });
+  play(state, { name: "Zealot", picks: { [a.id]: 100 } });
+  play(state, { name: "One", picks: { [b.id]: 20 } });
+  play(state, { name: "Two", picks: { [b.id]: 20 } });
+  play(state, { name: "Three", picks: { [b.id]: 20 } });
 
   const summary = buildAudienceSummary(state);
   assert.equal(summary.submitted, 4);
@@ -607,10 +593,9 @@ test("entries that were never submitted are ignored entirely", () => {
   const state = demo();
   const finding = state.findings.find((f) => f.submitted);
 
-  play(state, { name: "Done", role: "Investor", picks: { [finding.id]: 40 } });
+  play(state, { name: "Done", picks: { [finding.id]: 40 } });
   play(state, {
     name: "Halfway",
-    role: "Investor",
     picks: { [finding.id]: 100 },
     submitted: false,
   });
@@ -631,8 +616,8 @@ test("the room-versus-panel gap surfaces what the panel left on the board", () =
   award(state, { findingId: bought.id, panelistId: state.panelists[0].id, price: 40 });
 
   // The room rates the undrafted one highly and the bought one barely at all.
-  play(state, { name: "A", role: "Investor", picks: { [ignored.id]: 50, [bought.id]: 5 } });
-  play(state, { name: "B", role: "Investor", picks: { [ignored.id]: 50, [bought.id]: 5 } });
+  play(state, { name: "A", picks: { [ignored.id]: 50, [bought.id]: 5 } });
+  play(state, { name: "B", picks: { [ignored.id]: 50, [bought.id]: 5 } });
 
   const summary = buildAudienceSummary(state);
 
@@ -647,33 +632,11 @@ test("the room-versus-panel gap surfaces what the panel left on the board", () =
   assert.equal(contested.delta, -35, "the panel paid 40 for something worth 5 to the room");
 });
 
-test("the per-role breakdown scores each lens against its own participants", () => {
-  const state = demo();
-  const [a, b] = state.findings.filter((f) => f.submitted);
-
-  play(state, { name: "I1", role: "Investor", picks: { [a.id]: 60 } });
-  play(state, { name: "I2", role: "Investor", picks: { [a.id]: 40 } });
-  play(state, { name: "S1", role: "Security Hawk", picks: { [b.id]: 30 } });
-
-  const summary = buildAudienceSummary(state);
-  const investors = summary.byRole.find((r) => r.role === "Investor");
-  const hawks = summary.byRole.find((r) => r.role === "Security Hawk");
-
-  assert.equal(investors.entries, 2);
-  assert.equal(investors.top[0].finding.id, a.id);
-  assert.equal(investors.top[0].average, 50, "divided by the 2 investors, not all 3 players");
-
-  assert.equal(hawks.entries, 1);
-  assert.equal(hawks.top[0].finding.id, b.id);
-  assert.equal(hawks.top[0].average, 30);
-});
-
 test("an audience summary with nobody playing is empty rather than broken", () => {
   const summary = buildAudienceSummary(demo());
   assert.equal(summary.submitted, 0);
   assert.equal(summary.creditsAllocated, 0);
   assert.deepEqual(summary.overlooked, []);
-  assert.deepEqual(summary.byRole, []);
   assert.ok(summary.stats.every((s) => s.average === 0));
 });
 
@@ -767,7 +730,7 @@ test("whatChanged with no whyItMatters becomes the whole field", () => {
 test("audience entries round-trip, and junk allocations are scrubbed on read", () => {
   const state = demo();
   const finding = state.findings.find((f) => f.submitted);
-  play(state, { name: "Ana", role: "Investor", picks: { [finding.id]: 25 } });
+  play(state, { name: "Ana", picks: { [finding.id]: 25 } });
 
   const snapshot = toSnapshot(state);
   // What a flaky client could actually put on the wire.
@@ -809,9 +772,10 @@ test("a schema 1 event still loads: objectives dropped, rounds read off the pick
   delete snapshot.event.audienceOpen;
   delete snapshot.event.audienceBudget;
   delete snapshot.audience;
+  // Every schema up to 3 carried a role and its question on the panelist.
   for (const panelist of Object.values(snapshot.panelists)) {
-    delete panelist.role;
-    delete panelist.rolePrompt;
+    panelist.role = "Governor";
+    panelist.rolePrompt = "Does this survive a change of administration?";
   }
 
   const loaded = fromSnapshot(snapshot);
@@ -826,7 +790,11 @@ test("a schema 1 event still loads: objectives dropped, rounds read off the pick
   assert.deepEqual(loaded.audience, []);
   assert.equal(loaded.transactions[0].objectiveId, undefined, "the dead field is dropped");
   assert.equal(loaded.transactions[0].price, 12);
-  assert.ok(loaded.panelists.every((p) => p.role === "" && p.rolePrompt === ""));
+  assert.ok(
+    loaded.panelists.every((p) => p.role === undefined && p.rolePrompt === undefined),
+    "the dead role fields are dropped rather than carried back to the database",
+  );
+  assert.ok(loaded.panelists.every((p) => p.name && p.startingBudget === 100));
 
   const view = allPanelistViews(loaded).find((v) => v.panelist.id === state.panelists[0].id);
   assert.equal(view.spent, 12, "the old award still counts against its buyer");

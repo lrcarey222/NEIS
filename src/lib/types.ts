@@ -10,10 +10,9 @@
 //    of a room full of people.
 //
 // 2. A panelist's team is just "up to `roundCount` findings". There is no slot
-//    taxonomy: a panelist may buy any finding for any reason, and what makes
-//    their picks cohere is their *role* — the lens they were asked to draft
-//    against, carried on the panelist itself as a question the big screen
-//    shows the room.
+//    taxonomy: a panelist may buy any finding for any reason, and the app does
+//    not record why — a panelist is a name and an affiliation, and the reasoning
+//    stays where it belongs, with the person holding the microphone.
 //
 // 3. The audience plays the same game, one entry per phone. Their allocations
 //    live in `audience` and never touch `transactions`, so nothing the room
@@ -257,17 +256,6 @@ export interface Panelist {
   id: string;
   name: string;
   affiliation: string;
-  /**
-   * The lens this panelist drafts through — "Governor", "Utility CEO". Free
-   * text, because the panel is whoever turns up.
-   */
-  role: string;
-  /**
-   * The question the role is answering, projected beside their portfolio so
-   * the room can judge the picks against what the panelist was actually
-   * trying to do.
-   */
-  rolePrompt: string;
   startingBudget: number;
   sortOrder: number;
 }
@@ -295,8 +283,6 @@ export interface AudienceEntry {
   id: string;
   name: string;
   affiliation: string;
-  /** Matched by name against the panel's roles where one exists. */
-  role: string;
   /** findingId -> credits. Findings with nothing on them are omitted. */
   allocations: Record<string, number>;
   /** Only submitted entries count towards the averages. */
@@ -348,8 +334,13 @@ export interface EventState {
  * version 2 event still loads: its `whatChanged` text is appended to
  * `whyItMatters` rather than discarded, and an event with no `runOfShow` gets
  * an empty one, which every screen renders as "no schedule loaded".
+ *
+ * 4 dropped the panelist's `role` and `rolePrompt`, and the matching `role` on
+ * an audience entry. A panelist is a name and an affiliation; the audience
+ * joins with the same two fields. A version 3 event still loads — the role
+ * fields are read and discarded, and nothing else about it changes.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Soft length targets for the finding form.
@@ -450,47 +441,3 @@ export const CONFIDENCE_META: Record<
   medium: { label: "Medium confidence", short: "MED", bars: "▮▮▯" },
   low: { label: "Low confidence", short: "LOW", bars: "▮▯▯" },
 };
-
-/**
- * The roles the panel is seeded with, and the question each one is answering.
- *
- * Only defaults: both fields are free text in Setup, and typing a role name
- * that matches one of these offers to fill in its prompt. The audience picks
- * from whatever roles the panel actually ends up with, so the room is drafting
- * against the same brief as the stage.
- */
-export const DEFAULT_ROLES: { name: string; prompt: string }[] = [
-  {
-    name: "National Security Advisor",
-    prompt:
-      "Which findings most reduce exposure to coercion, disruption, or untrusted supply?",
-  },
-  {
-    name: "Treasury Secretary",
-    prompt:
-      "Which findings most improve productivity, market share, and the ability to compete without indefinite protection?",
-  },
-  {
-    name: "Governor",
-    prompt:
-      "Which findings most determine whether this agenda delivers visible benefits and survives a change of administration?",
-  },
-  {
-    name: "Utility CEO",
-    prompt:
-      "Which findings most affect reliable, abundant, predictably priced power for households and strategic industry?",
-  },
-  {
-    name: "National Lab Director",
-    prompt:
-      "Which findings most affect durable emissions reductions, deployment speed, learning, and technology diffusion?",
-  },
-];
-
-/** The prompt shipped with a role name, if it is one of the defaults. */
-export function defaultPromptForRole(role: string): string | null {
-  const match = DEFAULT_ROLES.find(
-    (entry) => entry.name.toLowerCase() === role.trim().toLowerCase(),
-  );
-  return match?.prompt ?? null;
-}

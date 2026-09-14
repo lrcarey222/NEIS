@@ -18,7 +18,6 @@
 import { emptySchedule } from "./schedule";
 import {
   type Breakout,
-  DEFAULT_ROLES,
   type EventState,
   type Finding,
   FINDING_TYPES,
@@ -83,21 +82,21 @@ export const BREAKOUT_BLUEPRINT: Omit<
 ];
 
 /**
- * One seat per default role.
+ * Five empty seats.
  *
- * The names are placeholders the operator overwrites in Setup; the roles are
- * the point, because they are what the panel drafts against and what the
- * audience picks from at /play.
+ * Names and affiliations are placeholders the operator overwrites in Setup —
+ * five because that is the panel the run of show is built around, and because
+ * five seats x three picks is exactly the fifteen findings on the board.
  */
-export const PANELIST_BLUEPRINT: Omit<Panelist, "startingBudget">[] =
-  DEFAULT_ROLES.map((role, index) => ({
+export const PANELIST_BLUEPRINT: Omit<Panelist, "startingBudget">[] = Array.from(
+  { length: 5 },
+  (_, index) => ({
     id: `pl-${index + 1}`,
     name: `Panelist ${index + 1}`,
     affiliation: "",
-    role: role.name,
-    rolePrompt: role.prompt,
     sortOrder: index,
-  }));
+  }),
+);
 
 /**
  * Findings each panelist ends up holding, and therefore rounds of bidding.
@@ -263,7 +262,7 @@ export function createRunOfShow(): ScheduleState {
       id: "sg-auction",
       title: "Strategic Findings Auction",
       description:
-        "Each panelist drafts the strongest set of findings for the question under their name.",
+        "Each panelist drafts the strongest set of findings they can from a fixed budget.",
       plannedStart: "11:35",
       plannedMinutes: 35,
       displayMode: "auction",
@@ -676,16 +675,14 @@ export function createEvent(options: CreateEventOptions = {}): EventState {
   const startingBudget = options.startingBudget ?? 100;
   const now = Date.now();
 
-  // Named panelists still inherit the default roles in seat order, so a fresh
-  // event always arrives with the five lenses filled in rather than blank.
+  // Names, if the caller has them; five numbered placeholders otherwise.
+  // Affiliations are typed in Setup either way.
   const panelists: Panelist[] = (
     options.panelistNames?.length
       ? options.panelistNames.map((name, i) => ({
           id: `pl-${i + 1}`,
           name,
           affiliation: "",
-          role: DEFAULT_ROLES[i % DEFAULT_ROLES.length].name,
-          rolePrompt: DEFAULT_ROLES[i % DEFAULT_ROLES.length].prompt,
           sortOrder: i,
         }))
       : PANELIST_BLUEPRINT

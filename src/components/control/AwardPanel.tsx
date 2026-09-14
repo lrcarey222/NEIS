@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { Notice, RoleChip, TypeChip, cx } from "@/components/primitives";
+import { Notice, TypeChip, cx } from "@/components/primitives";
 import {
   allPanelistViews,
   availableFindings,
@@ -246,7 +246,8 @@ export function AwardPanel({ state }: { state: EventState }) {
                         {view.panelist.name}
                       </span>
                       <span className="text-paper-faint tabular font-mono text-[0.625rem] tracking-[0.1em] uppercase">
-                        {view.panelist.role || "no role"} · {view.filledCount}/{rounds}
+                        {view.panelist.affiliation ? `${view.panelist.affiliation} · ` : ""}
+                        {view.filledCount}/{rounds}
                       </span>
                     </span>
                     <span className="tabular text-signal shrink-0 font-mono text-sm font-bold">
@@ -326,8 +327,8 @@ export function AwardPanel({ state }: { state: EventState }) {
                   “{selectedFinding?.finding.headline}”
                 </strong>{" "}
                 to <strong>{selectedPanelist?.panelist.name}</strong>
-                {selectedPanelist?.panelist.role
-                  ? ` (${selectedPanelist.panelist.role})`
+                {selectedPanelist?.panelist.affiliation
+                  ? ` (${selectedPanelist.panelist.affiliation})`
                   : ""}{" "}
                 for <strong className="tabular">{parsedPrice} credits</strong> — pick{" "}
                 <strong className="tabular">
@@ -378,7 +379,11 @@ export function AwardPanel({ state }: { state: EventState }) {
                 <span className="text-paper truncate text-sm font-semibold">
                   {view.panelist.name}
                 </span>
-                <RoleChip role={view.panelist.role} />
+                {view.panelist.affiliation ? (
+                  <span className="text-paper-faint truncate text-xs">
+                    {view.panelist.affiliation}
+                  </span>
+                ) : null}
                 <span className="tabular text-signal ml-auto font-mono text-sm font-bold">
                   {view.remaining}
                 </span>

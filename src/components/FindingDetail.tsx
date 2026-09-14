@@ -95,13 +95,11 @@ export function FindingDetail({
                   </dd>
                 </div>
                 <div>
-                  {/* The lens they were drafting through is the whole reason
-                      this pick is interesting, so it sits beside the price. */}
                   <dt className="text-paper-faint text-[0.6875rem] tracking-wide uppercase">
-                    Drafting as
+                    Affiliation
                   </dt>
                   <dd className="text-paper mt-1 text-base font-semibold">
-                    {panelist?.role || "—"}
+                    {panelist?.affiliation || "—"}
                   </dd>
                 </div>
                 <div>

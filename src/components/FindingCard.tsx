@@ -113,19 +113,23 @@ export function FindingCard({
             "border-ink-500 border-t",
             compact ? "mt-[0.35em] pt-[0.35em]" : "mt-2.5 pt-2",
           )}
-          // On the board the buyer's role goes in the tooltip rather than a
-          // second line: name and price are what the room reads at a glance,
-          // and the full record is one click away in the detail panel.
-          title={panelist.role ? `Drafted by ${panelist.name} as ${panelist.role}` : undefined}
+          // On the board the buyer's affiliation goes in the tooltip rather
+          // than a second line: name and price are what the room reads at a
+          // glance, and the full record is one click away in the detail panel.
+          title={
+            panelist.affiliation
+              ? `Drafted by ${panelist.name}, ${panelist.affiliation}`
+              : undefined
+          }
         >
           <p className="text-paper-dim truncate text-[0.75em] leading-tight font-medium">
             {panelist.name}
             <span className="text-paper-faint"> · </span>
             <span className="tabular text-signal">{transaction?.price}</span>
-            {compact || !panelist.role ? null : (
+            {compact || !panelist.affiliation ? null : (
               <>
                 <span className="text-paper-faint"> · </span>
-                <span className="text-paper-faint">{panelist.role}</span>
+                <span className="text-paper-faint">{panelist.affiliation}</span>
               </>
             )}
           </p>

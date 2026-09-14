@@ -26,8 +26,8 @@ import { AUCTION_RANK_LIMIT, type EventState } from "@/lib/types";
  *
  * Remaining budget is the single largest number on any panelist card, because
  * that is the number the room is doing arithmetic on between bids. Under the
- * name sits the role and its question — the panel is drafting free-form, so
- * what a pick is *for* is the only thing that makes it judgeable.
+ * name sits the affiliation, and nothing else: the panel is drafting free-form,
+ * and why a pick was made is for the panelist to say out loud.
  */
 export function AuctionMode({
   state,
@@ -68,7 +68,7 @@ export function AuctionMode({
             </h2>
             <p className="text-paper-mute mt-[0.6em] max-w-[52em] text-[0.9375em] leading-snug">
               {inProgress
-                ? `Any of the ${pool.length} findings on the board, for any reason — each room's top ${AUCTION_RANK_LIMIT}. Each panelist is building the strongest set for the question under their name.`
+                ? `Any of the ${pool.length} findings on the board, for any reason — each room's top ${AUCTION_RANK_LIMIT}. Each panelist is building the strongest set they can from what is left of their budget.`
                 : roundIndex < 0
                   ? "The moderator will open Round 1 shortly."
                   : "Every panelist has drafted a full team."}
@@ -248,22 +248,11 @@ function PanelistColumn({
           {panelist.name}
         </h3>
 
-        {/* The lens, then the question. Two lines at most: five of these plus
-            the budget block and the picks share one 16:9 column. */}
-        {panelist.role ? (
-          <p className="text-signal mt-[0.25em] truncate font-mono text-[0.625em] font-semibold tracking-[0.1em] uppercase">
-            {panelist.role}
-            {panelist.affiliation ? (
-              <span className="text-paper-faint"> · {panelist.affiliation}</span>
-            ) : null}
-          </p>
-        ) : panelist.affiliation ? (
-          <p className="text-paper-faint truncate text-[0.6875em]">{panelist.affiliation}</p>
-        ) : null}
-
-        {panelist.rolePrompt ? (
-          <p className="text-paper-mute mt-[0.3em] line-clamp-2 text-[0.625em] leading-snug italic">
-            {panelist.rolePrompt}
+        {/* One line at most: five of these plus the budget block and the picks
+            share one 16:9 column. */}
+        {panelist.affiliation ? (
+          <p className="text-paper-faint mt-[0.25em] truncate text-[0.6875em]">
+            {panelist.affiliation}
           </p>
         ) : null}
 
