@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   allPanelistViews,
   buildAudienceSummary,
@@ -19,9 +20,27 @@ import { CONFIDENCE_META, FINDING_TYPE_META } from "@/lib/types";
  * Rendered as a plain document with its own light palette rather than the dark
  * presentation theme, so Ctrl-P / Save as PDF produces something that can be
  * circulated after the event without a black background.
+ *
+ * `?anonymous` swaps every panelist name and affiliation for "Panelist N",
+ * numbered in board order, so the record can be circulated without attribution.
  */
 export default function SummaryPage() {
   const { state, status } = useEvent("summary");
+  const [anonymous, setAnonymous] = useState(false);
+
+  // Read after mount: the page is statically exported, so the query string is
+  // only known in the browser.
+  useEffect(() => {
+    setAnonymous(new URLSearchParams(window.location.search).has("anonymous"));
+  }, []);
+
+  function toggleAnonymous(next: boolean) {
+    setAnonymous(next);
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("anonymous", "");
+    else url.searchParams.delete("anonymous");
+    window.history.replaceState(null, "", url.toString().replace("anonymous=", "anonymous"));
+  }
 
   if (!state) {
     return (
@@ -38,6 +57,12 @@ export default function SummaryPage() {
   const audience = buildAudienceSummary(state);
   const breakouts = sortedBreakouts(state);
 
+  const panelistNumber = new Map(panelists.map((view, index) => [view.panelist.id, index + 1]));
+  const nameOf = (panelist: { id: string; name: string } | null | undefined) =>
+    panelist ? (anonymous ? `Panelist ${panelistNumber.get(panelist.id) ?? "?"}` : panelist.name) : "";
+  const affiliationOf = (panelist: { affiliation?: string } | null | undefined) =>
+    anonymous ? "" : (panelist?.affiliation ?? "");
+
   return (
     // Full-bleed white so the page reads as a document on screen as well as in
     // the print dialog, rather than a white column on the dark app background.
@@ -47,6 +72,14 @@ export default function SummaryPage() {
         <p className="text-sm text-[#555]">
           Use your browser&apos;s Print dialog and choose “Save as PDF”.
         </p>
+        <label className="ml-auto flex items-center gap-2 text-sm font-semibold text-[#111]">
+          <input
+            type="checkbox"
+            checked={anonymous}
+            onChange={(event) => toggleAnonymous(event.target.checked)}
+          />
+          Anonymise panelists
+        </label>
         <a
           href="../control/"
           className="rounded border border-[#ccc] px-3 py-1.5 text-sm font-semibold text-[#111] no-underline"
@@ -79,10 +112,10 @@ export default function SummaryPage() {
             <article key={view.panelist.id} className="break-inside-avoid">
               <header className="mb-2 flex items-baseline justify-between gap-4">
                 <h3 className="text-base font-bold">
-                  {view.panelist.name}
-                  {view.panelist.affiliation ? (
+                  {nameOf(view.panelist)}
+                  {affiliationOf(view.panelist) ? (
                     <span className="ml-2 text-sm font-normal text-[#666]">
-                      {view.panelist.affiliation}
+                      {affiliationOf(view.panelist)}
                     </span>
                   ) : null}
                 </h3>
@@ -141,8 +174,8 @@ export default function SummaryPage() {
                 <span className="flex-1">
                   <span className="font-medium">{view.finding.headline}</span>
                   <span className="block text-xs text-[#666]">
-                    {view.breakout?.name} · {view.panelist?.name}
-                    {view.panelist?.affiliation ? ` (${view.panelist.affiliation})` : ""}
+                    {view.breakout?.name} · {nameOf(view.panelist)}
+                    {affiliationOf(view.panelist) ? ` (${affiliationOf(view.panelist)})` : ""}
                   </span>
                 </span>
                 <span className="w-12 shrink-0 text-right font-mono font-bold">
@@ -255,7 +288,7 @@ export default function SummaryPage() {
                         {FINDING_TYPE_META[finding.type].label} · rank {finding.breakoutRank} ·{" "}
                         {CONFIDENCE_META[finding.confidence].short} confidence
                         {transaction
-                          ? ` · sold to ${buyer?.name} for ${transaction.price}`
+                          ? ` · sold to ${nameOf(buyer)} for ${transaction.price}`
                           : isAuctionEligible(finding)
                             ? " · undrafted"
                             : " · not in the auction"}
