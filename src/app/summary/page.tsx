@@ -24,6 +24,13 @@ import { CONFIDENCE_META, FINDING_TYPE_META } from "@/lib/types";
  * `?anonymous` swaps every panelist name and affiliation for "Panelist N",
  * numbered in board order, so the record can be circulated without attribution.
  */
+/**
+ * A zero @page margin stops the browser printing its own header and footer
+ * (page title, URL, date) over the document. Scoped to this page by rendering
+ * it here rather than in the global stylesheet.
+ */
+const PRINT_WITHOUT_BROWSER_HEADERS = <style>{`@media print { @page { margin: 0; } }`}</style>;
+
 export default function SummaryPage() {
   const { state, status } = useEvent("summary");
   const [anonymous, setAnonymous] = useState(false);
@@ -45,6 +52,7 @@ export default function SummaryPage() {
   if (!state) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-white p-8">
+        {PRINT_WITHOUT_BROWSER_HEADERS}
         <p className="font-mono text-xs tracking-widest text-[#666] uppercase">
           {status === "connecting" ? "Loading the event…" : "No event to summarise yet."}
         </p>
@@ -67,7 +75,15 @@ export default function SummaryPage() {
     // Full-bleed white so the page reads as a document on screen as well as in
     // the print dialog, rather than a white column on the dark app background.
     <div className="min-h-dvh bg-white">
-    <main className="mx-auto w-full max-w-4xl bg-white px-8 py-10 text-[#111] print:px-0 print:py-0">
+    <main className="mx-auto w-full max-w-4xl bg-white px-8 py-10 text-[#111] print:table print:max-w-none print:px-[0.6in] print:py-0">
+      {PRINT_WITHOUT_BROWSER_HEADERS}
+      {/* The page's vertical print margins, which a table repeats on every sheet. */}
+      <div aria-hidden className="hidden print:table-header-group">
+        <div className="h-[0.6in]" />
+      </div>
+      <div aria-hidden className="hidden print:table-footer-group">
+        <div className="h-[0.6in]" />
+      </div>
       <div className="no-print mb-8 flex items-center justify-between gap-4 rounded border border-[#ddd] bg-[#fafafa] p-3">
         <p className="text-sm text-[#555]">
           Use your browser&apos;s Print dialog and choose “Save as PDF”.
